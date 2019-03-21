@@ -49,7 +49,9 @@ public class Controller implements Runnable{
 	@Override
 	public void run() {
 		//Query user for month(s) and year to process.
-		
+		queryDate();
+		//Copy Template file to Output file
+		//Invoke Processor with Date & Output file handle.
 	}
 
 }
