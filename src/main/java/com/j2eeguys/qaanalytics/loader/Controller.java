@@ -1,12 +1,15 @@
 /*
- * Copyright 2019
+ * Copyright (c) 2019
+ * This code is licensed under the GPLv2.  Please contact Sanddust at
+ * sanddust@j2eeguys.com for additional licenses. 
  */
 package com.j2eeguys.qaanalytics.loader;
 
 import javax.swing.JOptionPane;
 
 /**
- * @author Sanddust
+ * Sets up the files, streams, templates, etc. for processing.
+ * @author Sanddust sanddust@j2eeguys.com
  *
  */
 public class Controller implements Runnable{
@@ -15,7 +18,7 @@ public class Controller implements Runnable{
 	protected String year;
 	
 	/**
-	 * 
+	 * Constructor.
 	 */
 	public Controller() {
 		// TODO Auto-generated constructor stub
@@ -43,6 +46,7 @@ public class Controller implements Runnable{
 				null, months
 				, "01");
 	}
+	
 	/* (non-Javadoc)
 	 * @see java.lang.Runnable#run()
 	 */

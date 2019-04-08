@@ -1,13 +1,20 @@
 /*
- * Copyright 2019
+ * Copyright (c) 2019
+ * This code is licensed under the GPLv2.  Please contact Sanddust at
+ * sanddust@j2eeguys.com for additional licenses. 
  */
 package com.j2eeguys.qaanalytics.loader;
 
 import java.io.File;
 
 /**
- * @author honor
- *
+ * Processes the selected Month. Reads the .rep files from the input (or current
+ * working) directory, and writes to the output spreadsheet.  The output
+ * spreadsheet can be either the default template or a user supplied template.
+ * Note that in the case of a user supplied template, a conforming layout is
+ * required.
+ * 
+ * @author Sanddust sanddust@j2eeguys.com
  */
 public class Processor {
 	protected String month;
