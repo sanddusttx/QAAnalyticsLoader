@@ -1,61 +1,48 @@
 /*
- * Copyright (c) 2019
- * This code is licensed under the GPLv2.  Please contact Sanddust at
- * sanddust@j2eeguys.com for additional licenses. 
+ * Copyright (c) 2019 This code is licensed under the GPLv2. Please contact
+ * Sanddust at sanddust@j2eeguys.com for additional licenses.
  */
 package com.j2eeguys.qaanalytics.loader;
 
-import javax.swing.JOptionPane;
-
 /**
  * Sets up the files, streams, templates, etc. for processing.
+ * 
  * @author Sanddust sanddust@j2eeguys.com
- *
  */
-public class Controller implements Runnable{
+public class Controller implements Runnable {
 
-	protected String month;
-	protected String year;
-	
-	/**
-	 * Constructor.
-	 */
-	public Controller() {
-		// TODO Auto-generated constructor stub
-	}
+  protected String month;
+  protected String year;
 
-	public void queryDate() {
-		//Year
-		String[] years = {"2018", "2019"};
-		this.year = (String)JOptionPane.showInputDialog(null, 
-				"Please select year", "Select", 
-				JOptionPane.QUESTION_MESSAGE, 
-				null, years, "2019");
-		//Month
-		String[] months = new String[12];
-		for(int i=0; i<12;i++) {
-			if ( i < 9 ) {
-				months[i] = "0" + (i +1);
-			} else {
-				months[i] = Integer.toString(i+ 1);
-			}
-		}
-		this.month = (String)JOptionPane.showInputDialog(null, 
-				"Please select month", "Select", 
-				JOptionPane.QUESTION_MESSAGE, 
-				null, months
-				, "01");
-	}
-	
-	/* (non-Javadoc)
-	 * @see java.lang.Runnable#run()
-	 */
-	@Override
-	public void run() {
-		//Query user for month(s) and year to process.
-		queryDate();
-		//Copy Template file to Output file
-		//Invoke Processor with Date & Output file handle.
-	}
+  /**
+   * Constructor.
+   */
+  public Controller() {
+    // end <init>
+  }
+
+  /**
+   * Constructor for Controller.
+   * 
+   * @param month
+   * @param year
+   */
+  public Controller(String month, String year) {
+    super();
+    this.month = month;
+    this.year = year;
+    // end <init>
+  }
+
+  /*
+   * (non-Javadoc)
+   * @see java.lang.Runnable#run()
+   */
+  @Override
+  public void run() {
+    // Copy Template file to Output file
+    // Invoke Processor with Date & Output file handle.
+    // end run
+  }
 
 }
