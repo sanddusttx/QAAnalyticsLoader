@@ -1,3 +1,6 @@
 sanddust
 javadoc
 gorky
+spectrometry
+nexion
+perkin
