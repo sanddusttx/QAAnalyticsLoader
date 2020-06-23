@@ -5,7 +5,15 @@
  */
 package com.j2eeguys.qaanalytics.loader;
 
-import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 
 /**
  * Processes the selected Month. Reads the .rep files from the input (or current
@@ -19,28 +27,69 @@ import java.io.File;
 public class Processor {
 	protected String month;
 	protected String year;
-	protected File outputFile;
+	protected Workbook workbook;
 
 	/**
 	 * @param month
 	 * @param year
-	 * @param outputFile
+	 * @param workbook
 	 */
-	public Processor(String month, String year, File outputFile) {
+	public Processor(String month, String year, Workbook workbook) {
 		super();
 		this.month = month;
 		this.year = year;
-		this.outputFile = outputFile;
+		this.workbook = workbook;
+		//end <init>
 	}
 	
+	/**
+	 * Process the Rep files
+	 */
 	public void process() {
-		//Open Outputfile for writing (wrap with Poi!)
+	    //SPDTODO
+		//Load Maps
+	    //SPDTODO
 		//Calculate number of days in the month!
-		final int days = 0;
+		final int days = 31;
 		//Loop through the rep files
-		for (int i = 0; i < days; i++) {
+		for (int i = 1; i <= days; i++) {
+		  //SPDTODO: Make this more efficient
+			final String fileName = month + (i < 10 ? "0" + i : i) + year.substring(2) + ".rep";
+            //SPDTODO: Check that the REP file is present!
+			//SPDTODO: Open a CSV File			
+			try (final InputStream repFile = new FileInputStream(fileName);
+			    final HSSFWorkbook repBook = new HSSFWorkbook(repFile)){
+	            
+	            final Sheet repSheet = repBook.getSheetAt(0);
+	            final int rowCount = repSheet.getLastRowNum();
+	            for(int j = 0; j < rowCount; j++) {
+	              //SPDTODO: Check if a desired value
+	              String name = repSheet.getRow(j++).getCell(0).getStringCellValue();
+	              String date = repSheet.getRow(j++).getCell(0).getStringCellValue();
+	              while(repSheet.getRow(j).getCell(0).getStringCellValue().startsWith("|")) {
+					//Will generally be LI on first cycle.  Data is in Column 4;
+	                String element = repSheet.getRow(j).getCell(1).getStringCellValue();
+	                final Sheet qcSheet = this.workbook.getSheet(element);
+					//SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation Range.
+					//SPDTODO: Get Column number based on Rep File/Sample Date
+	                Cell currentCell = qcSheet.getRow(6).getCell(6);
+					currentCell.setCellValue(repSheet.getRow(j).getCell(4).getNumericCellValue());
+	              }
+	            }
+			} catch (IOException e) {
+			  throw new RuntimeException("Error reading file: " + fileName, e);
+			}
 			
 		}
+		//end process
+	}
+	
+	/**
+	 * Save the Workbook
+	 * @throws IOException thrown if an exception occurs writing to the output file.
+	 */
+	public void write(final OutputStream out) throws IOException {
+	  this.workbook.write(out);
 	}
 
 }
