@@ -6,7 +6,8 @@
  */
 package com.j2eeguys.qaanalytics.loader;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -31,7 +32,7 @@ class ProcessorTest {
     try (final InputStream templateStream =
         Thread.currentThread().getContextClassLoader().getResourceAsStream("QCTemplate.xls");) {
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
-      this.processor = new Processor("12", "2018", template);
+      this.processor = new Processor("12", "2018", template, new File("src/test/resources"));
     } catch (IOException e) {
       throw new RuntimeException("Exception initializing workbook", e);
     }
@@ -49,6 +50,7 @@ class ProcessorTest {
     }
     try (final OutputStream testOut = new FileOutputStream(testSheetFile)){
     this.processor.write(testOut);
+    testOut.flush();
     }
     final File demoFile = new File("src/test/resources", "December 2018 QC.xls");
     assertEquals(demoFile.length(), testSheetFile.length());

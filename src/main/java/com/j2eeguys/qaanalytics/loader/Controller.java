@@ -53,7 +53,7 @@ public class Controller implements Runnable {
         Thread.currentThread().getContextClassLoader().getResourceAsStream("QCTemplate.xls");){
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
       // Invoke Processor with Date & Workbook.
-      final Processor proccessor = new Processor(month, year, template);
+      final Processor proccessor = new Processor(month, year, template, new File("."));
       //Save Processed Data!
       final OutputStream out = new FileOutputStream(new File("QCAnalytic.xls"));
       proccessor.write(out);

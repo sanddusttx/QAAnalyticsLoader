@@ -5,6 +5,7 @@
  */
 package com.j2eeguys.qaanalytics.loader;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,20 +26,22 @@ import org.apache.poi.ss.usermodel.Workbook;
  * @author Sanddust sanddust@j2eeguys.com
  */
 public class Processor {
+    protected File repDir;
 	protected String month;
 	protected String year;
 	protected Workbook workbook;
-
+	
 	/**
 	 * @param month
 	 * @param year
 	 * @param workbook
 	 */
-	public Processor(String month, String year, Workbook workbook) {
+	public Processor(String month, String year, Workbook workbook, File repDir) {
 		super();
 		this.month = month;
 		this.year = year;
 		this.workbook = workbook;
+		this.repDir = repDir;
 		//end <init>
 	}
 	
@@ -55,9 +58,13 @@ public class Processor {
 		for (int i = 1; i <= days; i++) {
 			final String fileName = month + (i < 10 ? "0" + i : i) + year.substring(2) + ".rep";
             //TODO: Check that the REP file is present!
+			final File repFile = new File(repDir, fileName);
+			if (!repFile.exists()) {
+			  continue;
+			}
 			//Open CSV File			
-			try (final InputStream repFile = new FileInputStream(fileName);
-			    final HSSFWorkbook repBook = new HSSFWorkbook(repFile)){
+			try (final InputStream repStream = new FileInputStream(repFile);
+			    final HSSFWorkbook repBook = new HSSFWorkbook(repStream)){
 	            
 	            final Sheet repSheet = repBook.getSheetAt(0);
 	            final int rowCount = repSheet.getLastRowNum();
@@ -71,10 +78,11 @@ public class Processor {
 	                final Sheet qcSheet = this.workbook.getSheet(element);
                     //TODO: Check that there was a tab for the element.
 	                //If no tab, qcSheet == null.
-					//SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation Range.
-					//SPDTODO: Get Column number based on Rep File/Sample Date
+                    final double repValue = repSheet.getRow(j).getCell(4).getNumericCellValue();
+                    //SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation Range.
+                    //SPDTODO: Get Column number based on Rep File/Sample Date
 	                Cell currentCell = qcSheet.getRow(6).getCell(6);
-					currentCell.setCellValue(repSheet.getRow(j).getCell(4).getNumericCellValue());
+                    currentCell.setCellValue(repValue);
 	              }
 	            }
 			} catch (IOException e) {
