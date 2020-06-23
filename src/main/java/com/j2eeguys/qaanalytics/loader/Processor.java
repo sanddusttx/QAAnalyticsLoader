@@ -53,10 +53,9 @@ public class Processor {
 		final int days = 31;
 		//Loop through the rep files
 		for (int i = 1; i <= days; i++) {
-		  //SPDTODO: Make this more efficient
 			final String fileName = month + (i < 10 ? "0" + i : i) + year.substring(2) + ".rep";
-            //SPDTODO: Check that the REP file is present!
-			//SPDTODO: Open a CSV File			
+            //TODO: Check that the REP file is present!
+			//Open CSV File			
 			try (final InputStream repFile = new FileInputStream(fileName);
 			    final HSSFWorkbook repBook = new HSSFWorkbook(repFile)){
 	            
@@ -68,8 +67,10 @@ public class Processor {
 	              String date = repSheet.getRow(j++).getCell(0).getStringCellValue();
 	              while(repSheet.getRow(j).getCell(0).getStringCellValue().startsWith("|")) {
 					//Will generally be LI on first cycle.  Data is in Column 4;
-	                String element = repSheet.getRow(j).getCell(1).getStringCellValue();
+	                final String element = repSheet.getRow(j).getCell(1).getStringCellValue();
 	                final Sheet qcSheet = this.workbook.getSheet(element);
+                    //TODO: Check that there was a tab for the element.
+	                //If no tab, qcSheet == null.
 					//SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation Range.
 					//SPDTODO: Get Column number based on Rep File/Sample Date
 	                Cell currentCell = qcSheet.getRow(6).getCell(6);
