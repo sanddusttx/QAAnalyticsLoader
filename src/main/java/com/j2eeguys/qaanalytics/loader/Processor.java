@@ -6,12 +6,14 @@
 package com.j2eeguys.qaanalytics.loader;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
+import java.util.Iterator;
 
-import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -63,25 +65,34 @@ public class Processor {
 			  continue;
 			}
 			//Open CSV File			
-			try (final InputStream repStream = new FileInputStream(repFile);
-			    final HSSFWorkbook repBook = new HSSFWorkbook(repStream)){
-	            
-	            final Sheet repSheet = repBook.getSheetAt(0);
-	            final int rowCount = repSheet.getLastRowNum();
-	            for(int j = 0; j < rowCount; j++) {
+            try (final CSVParser parser =
+                CSVParser.parse(repFile, Charset.forName("UTF-8"), CSVFormat.RFC4180)) {
+              final Iterator<CSVRecord> iter = parser.iterator();
+              for(CSVRecord rec = iter.next();iter.hasNext();) {
 	              //SPDTODO: Check if a desired value
-	              String name = repSheet.getRow(j++).getCell(0).getStringCellValue();
-	              String date = repSheet.getRow(j++).getCell(0).getStringCellValue();
-	              while(repSheet.getRow(j).getCell(0).getStringCellValue().startsWith("|")) {
+                  if (rec.size()==0) {
+                    //Empty record;
+                    rec = iter.next();
+                    continue;
+                  }
+	              String name = rec.get(0);
+	              iter.next();
+	              String date = rec.get(0);
+	              for(; iter.hasNext() && (rec = iter.next()).size()>0 && rec.get(0).startsWith("|");) {
 					//Will generally be LI on first cycle.  Data is in Column 4;
-	                final String element = repSheet.getRow(j).getCell(1).getStringCellValue();
+	                final String element = rec.get(1);
 	                final Sheet qcSheet = this.workbook.getSheet(element);
                     //TODO: Check that there was a tab for the element.
 	                //If no tab, qcSheet == null.
-                    final double repValue = repSheet.getRow(j).getCell(4).getNumericCellValue();
+                    final String rawRepValue = rec.get(4);
+                    if (rawRepValue == null || rawRepValue.isEmpty()) {
+                      //Blank Value, skip!
+                      continue;
+                    }//else
+                    final double repValue = Double.parseDouble(rawRepValue);
                     //SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation Range.
                     //SPDTODO: Get Column number based on Rep File/Sample Date
-	                Cell currentCell = qcSheet.getRow(6).getCell(6);
+                    final Cell currentCell = qcSheet.getRow(6).getCell(6);
                     currentCell.setCellValue(repValue);
 	              }
 	            }
