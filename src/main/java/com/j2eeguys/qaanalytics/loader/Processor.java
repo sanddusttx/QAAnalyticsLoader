@@ -84,6 +84,10 @@ public class Processor {
 	                final Sheet qcSheet = this.workbook.getSheet(element);
                     //TODO: Check that there was a tab for the element.
 	                //If no tab, qcSheet == null.
+	                if (qcSheet == null ) {
+	                  // Blank Vaule, skip!
+	                  continue;
+	                }
                     final String rawRepValue = rec.get(4);
                     if (rawRepValue == null || rawRepValue.isEmpty()) {
                       //Blank Value, skip!
