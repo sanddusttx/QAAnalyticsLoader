@@ -54,6 +54,7 @@ public class Controller implements Runnable {
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
       // Invoke Processor with Date & Workbook.
       final Processor proccessor = new Processor(month, year, template, new File("."));
+      proccessor.process();
       //Save Processed Data!
       final OutputStream out = new FileOutputStream(new File("QCAnalytic.xls"));
       proccessor.write(out);
