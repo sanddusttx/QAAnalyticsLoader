@@ -4,6 +4,8 @@
  */
 package com.j2eeguys.qaanalytics;
 
+import java.util.Calendar;
+
 import javax.swing.JOptionPane;
 
 import com.j2eeguys.qaanalytics.loader.Controller;
@@ -16,6 +18,8 @@ import com.j2eeguys.qaanalytics.loader.Controller;
  */
 public class Loader {
 
+  protected static final int CURRENT_YEAR = Calendar.getInstance().get(Calendar.YEAR);
+  
   protected String month;
   protected String year;
 
@@ -25,15 +29,25 @@ public class Loader {
   public Loader() {
     // init
   }
+  
+  protected String[] getYears() {
+    final int size = CURRENT_YEAR - 2018;
+    final String[] yearList = new String[size];
+    for(int i = 0, y = 2018; i < size; i++, y++) {
+      yearList[i] = String.valueOf(y);
+    }
+    return yearList;
+    //end getYears
+  }
 
   /**
    * Query the user for month/year to process.
    */
   public void queryDate() {
     // Year
-    String[] years = { "2018", "2019" };
+    final String[] years = getYears();
     this.year = (String) JOptionPane.showInputDialog(null, "Please select year", "Select",
-        JOptionPane.QUESTION_MESSAGE, null, years, "2019");
+        JOptionPane.QUESTION_MESSAGE, null, years, String.valueOf(CURRENT_YEAR));
     // Month
     String[] months = new String[12];
     for (int i = 0; i < 12; i++) {
@@ -43,8 +57,12 @@ public class Loader {
         months[i] = Integer.toString(i + 1);
       }
     }
+    //Get Month is 0-Offset, but user and files are 1-Offset
+    final int currentMonth = Calendar.getInstance().get(Calendar.MONTH) + 1;
+    final String defaultMonth = currentMonth < 10 ? "0" + currentMonth : String.valueOf(currentMonth);
     this.month = (String) JOptionPane.showInputDialog(null, "Please select month", "Select",
-        JOptionPane.QUESTION_MESSAGE, null, months, "01");
+        JOptionPane.QUESTION_MESSAGE, null, months, defaultMonth);
+    //end queryDate
   }
 
   /**
