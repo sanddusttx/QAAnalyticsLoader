@@ -95,8 +95,8 @@ public class Processor {
                     }//else
                     final double repValue = Double.parseDouble(rawRepValue);
                     //SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation Range.
-                    //SPDTODO: Get Column number based on Rep File/Sample Date
-                    final Cell currentCell = qcSheet.getRow(6).getCell(6);
+                    //number of days added to the colmen subtracting 1 for 0-Offset of POI
+                    final Cell currentCell = qcSheet.getRow(6).getCell(i+6-1);
                     currentCell.setCellValue(repValue);
 	              }
 	            }
