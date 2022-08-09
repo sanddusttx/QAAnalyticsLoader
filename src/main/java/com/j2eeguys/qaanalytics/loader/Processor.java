@@ -6,7 +6,9 @@
 package com.j2eeguys.qaanalytics.loader;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.Iterator;
@@ -17,6 +19,8 @@ import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.ini4j.Profile;
+import org.ini4j.Wini;
 
 /**
  * Processes the selected Month. Reads the .rep files from the input (or current
@@ -26,6 +30,7 @@ import org.apache.poi.ss.usermodel.Workbook;
  * required.
  * 
  * @author Sanddust sanddust@j2eeguys.com
+ * @author Gorky gorky@j2eeguys.com
  */
 public class Processor {
     protected File repDir;
@@ -45,6 +50,22 @@ public class Processor {
 		this.workbook = workbook;
 		this.repDir = repDir;
 		//end <init>
+	}
+	
+	/**
+	 * Load the ini style configuration file loader.config.  If not found in the local directory,
+	 * the default configuration will be loaded.
+	 * @return The Profile wrapping the configuration file.
+	 * @throws IOException if the configuration file can not be loaded.
+	 */
+	protected Profile loadConfig() throws IOException {
+	  final File loaderConfig = new File(".", "loader.config");
+	  try (final InputStream configStream = loaderConfig.exists() ? new FileInputStream(loaderConfig):
+	    Thread.currentThread().getContextClassLoader().getResourceAsStream("loader.config");
+	    ){
+	    return new Wini(configStream);
+	  }
+	  //end loadConfig
 	}
 	
 	/**

@@ -24,6 +24,8 @@ dependencies {
     implementation 'org.apache.poi:poi-ooxml:4.1.2'
     // https://mvnrepository.com/artifact/org.apache.commons/commons-csv
     implementation 'org.apache.commons:commons-csv:1.8'
+    // https://mvnrepository.com/artifact/org.ini4j/ini4j
+    implementation 'org.ini4j:ini4j:0.5.4'
     
 	testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.2'
 	testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.6.2'
