@@ -4,9 +4,14 @@
  */
 package com.j2eeguys.qaanalytics;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Calendar;
 
 import javax.swing.JOptionPane;
+
+import org.apache.poi.util.IOUtils;
 
 import com.j2eeguys.qaanalytics.loader.Controller;
 
@@ -65,11 +70,40 @@ public class Loader {
     //end queryDate
   }
 
+  protected static String getUsage() {
+    return "Usage: java -jar QAAnalysticsLoader.jar <options>\n"
+        + "-h this help message\n"
+        + "-t create template Spreadsheet and config files\n";
+    //end getUsage
+  }
+  
+  protected static void writeTemplates() throws IOException {
+    final String[] files = { "QCTemplate.xls", "loader.config" };
+    for (final String currentFile : files) {
+      try (final InputStream inStream = 
+        Thread.currentThread().getContextClassLoader().getResourceAsStream(currentFile);){
+        IOUtils.copy(inStream, new File(currentFile));
+        
+      }
+    }
+    //end writeTemplates
+  }
+  
   /**
    * Main method for Command Line/Application Execution.
    * @param args Command line arguments.
    */
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Throwable{
+    if (args != null && args.length > 0) {
+      for (final String arg : args) {
+        if ("-h".equals(arg)) {
+          System.out.println(getUsage()); //NOSONAR -- Main Method
+        } else if ("-t".equals(arg)) {
+          writeTemplates();
+        }
+      }//end for
+      return; //Done
+    }//else
     final Loader loader = new Loader();
     //Query user for month(s) and year to process.
     loader.queryDate();
