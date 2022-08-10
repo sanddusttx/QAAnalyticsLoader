@@ -29,6 +29,7 @@ class ProcessorTest {
   protected void setupProcessor(final String fileName) {
     try (final InputStream templateStream =
         Thread.currentThread().getContextClassLoader().getResourceAsStream(fileName);) {
+      @SuppressWarnings("resource") //Handed off for more processing
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
       this.processor = new Processor("12", "2018", template, new File("src/test/resources"));
     } catch (IOException e) {
