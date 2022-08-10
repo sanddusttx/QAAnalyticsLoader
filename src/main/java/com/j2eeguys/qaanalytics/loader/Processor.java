@@ -215,8 +215,34 @@ public class Processor {
               } // else
               final double repValue = Double.parseDouble(rawRepValue);
               // TODO: Get Row number based on Deviation Range. - SPD
-              // number of days added to the colmen subtracting 1 for 0-Offset of POI
-              final Cell currentCell = qcSheet.getRow(rangeTopRow).getCell(day + colDayStart - 1);
+              // number of days added to the column subtracting 1 for 0-Offset of POI
+              final Cell medianCell = qcSheet.getRow(rangeTopRow + 2).getCell(5);
+              final double median = medianCell.getNumericCellValue();
+              int trackNumber = 0;
+              if (repValue == median) {
+                trackNumber = rangeTopRow + 2;
+              } else if (repValue > median) {
+                final Cell rangeCell = qcSheet.getRow(rangeTopRow + 1).getCell(5);
+                final double rangeValue = rangeCell.getNumericCellValue();
+                if (repValue <= rangeValue) {
+                  trackNumber = 1; 
+                }
+                  else {
+                    trackNumber =0;
+                  }
+              } else {
+                final Cell rangeCell = qcSheet.getRow(rangeTopRow + 3).getCell(5);
+                final double rangeValue = rangeCell.getNumericCellValue();
+                if (repValue >= rangeValue) {
+                  trackNumber=3; 
+                } else {
+                    trackNumber=4;
+                }
+              }
+              Cell currentCell = qcSheet.getRow(rangeTopRow + trackNumber).getCell(day + colDayStart - 1);
+              if (currentCell == null) {
+                currentCell = qcSheet.getRow(rangeTopRow + trackNumber).createCell(day + colDayStart - 1);
+              }
               currentCell.setCellValue(repValue);
             }//else, not a mapped QC Row.
           }
