@@ -20,6 +20,9 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.ini4j.Profile;
@@ -59,6 +62,8 @@ public class Processor {
     this.repDir = repDir;
     // end <init>
   }
+  
+  protected int rangeColumn;
 
   /**
    * Load the ini style configuration file loader.config.  If not found in the local directory,
@@ -74,9 +79,34 @@ public class Processor {
       final Wini config = new Wini(configStream);
       this.mappings = config.get("Mappings");
       loadRangeStarts(config);
+      this.rangeColumn = getCharValue(config.get("Template"), "column.ranges") - 'A';
       return config;
     }
     //end loadConfig
+  }
+  
+  /**
+   * Get the char value of a configuration item.
+   * @param section The section with the configuration settings containing the key.
+   * @param configKey The lookup key for the configuration item
+   * @return the character value of the configuration item.
+   * @throws NullPointerException thrown if the configKey is not defined in the configuration file.
+   */
+  protected static char getCharValue(final Section section, final String configKey) {
+    return section.get(configKey).trim().charAt(0);
+    //end getCharValue
+  }
+  
+  /**
+   * Get the char value of a configuration item.
+   * @param section The section with the configuration settings containing the key.
+   * @param configKey The lookup key for the configuration item
+   * @return the character value of the configuration item.
+   * @throws NullPointerException thrown if the configKey is not defined in the configuration file.
+   */
+  protected static int getIntValue(final Section section, final String configKey) {
+    return Integer.parseInt(section.get(configKey).trim());
+    //end getIntValue
   }
   
   protected void loadRangeStarts(final Profile config) {
@@ -84,12 +114,12 @@ public class Processor {
     this.rangeStarts = new HashMap<>(rangeNames.size());
     final Section templateSection = config.get("Template");
     //Row Numbers are 1-Offset, but we need to use 0-Offset.
-    final int rowFirstName = Integer.valueOf(templateSection.get("section.firstRow")) - 1
-        + Integer.valueOf(templateSection.get("section.nameRow")) - 1;
-    final int startDiff = Integer.valueOf(templateSection.get("section.nameRow"))
-        - Integer.valueOf(templateSection.get("section.firstRow")) 
+    final int rowFirstName = getIntValue(templateSection, "section.firstRow") - 1
+        + getIntValue(templateSection, "section.nameRow") - 1;
+    final int startDiff = getIntValue(templateSection, "section.nameRow")
+        - getIntValue(templateSection, "section.firstRow")
         + 1; //Skip the "Flag" row and start with the actual range row.
-    final int rangeSize = Integer.valueOf(templateSection.get("section.numRows"));
+    final int rangeSize = getIntValue(templateSection, "section.numRows");
     final Sheet firstSheet = this.workbook.getSheetAt(0);
     for(int row = rowFirstName; this.rangeStarts.size() < rangeNames.size() &&
         row < firstSheet.getLastRowNum();row += rangeSize) {
@@ -115,6 +145,24 @@ public class Processor {
     //end getRangeTopRow
   }
   
+  protected void formatColumn(final int colRanges, final int firstRow, final int dateCol) {
+    for(final Iterator<Sheet> it = this.workbook.sheetIterator();it.hasNext();) {
+      final Sheet currentSheet = it.next();
+      for(int i = firstRow,rowCount = currentSheet.getLastRowNum(); i < rowCount;i++) {
+        final Row currentRow = currentSheet.getRow(i);
+        if (currentRow != null) {
+          final Cell rangeCell = currentRow.getCell(colRanges);
+          if (rangeCell != null) {
+            final CellStyle style = rangeCell.getCellStyle();
+            final Cell currentCell = currentRow.getCell(dateCol, MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            currentCell.setCellStyle(style);
+          }
+        }
+      }
+    }
+    //end formatColumn
+  }
+  
   /**
    * Process the Rep files
    * @throws IOException thrown if the configuration file can not be loaded.
@@ -122,17 +170,20 @@ public class Processor {
   public void process() throws IOException {
     // Load Maps and Configs
     final Profile config = loadConfig();
-    final int colDayStart = 
-        (int)config.get("Template", "column.day1").trim().charAt(0) - 'A';
+    final int colDayStart = getCharValue(config.get("Template"), "column.day1") - 'A';
+    final int colRanges = getCharValue(config.get("Template"), "column.ranges") - 'A';
     // TODO: Calculate number of days in the month! - SPD
     final int days = 31;
     // Loop through the rep files
     for (int day = 1; day <= days; day++) {
-      final String fileName = month + (day < 10 ? "0" + day : day) + year.substring(2) + ".rep";
-      final File repFile = new File(repDir, fileName);
+      final String fileName =
+          this.month + (day < 10 ? "0" + day : Integer.toString(day)) + this.year.substring(2) + ".rep";
+      final File repFile = new File(this.repDir, fileName);
       if (!repFile.exists()) {
         continue;
       }
+      //Have a file, format the columns
+      formatColumn(colRanges, 2, colDayStart + day - 1); //Day is 1-Offset, Columns are 0-Offset.
       // Open CSV File
       try (final CSVParser parser = CSVParser.parse(repFile, Charset.forName("UTF-8"), CSVFormat.RFC4180)) {
         final Iterator<CSVRecord> iter = parser.iterator();

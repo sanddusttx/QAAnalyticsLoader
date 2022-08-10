@@ -42,6 +42,7 @@ class ProcessorTest {
   @Test
   void testProcess() throws IOException {
     setupProcessor("QCTemplate.xls");
+    this.processor.loadConfig();
     this.processor.process();
     final File testSheetFile = new File("build/test", "December 2018 TestQC.xls");
     if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()) {
