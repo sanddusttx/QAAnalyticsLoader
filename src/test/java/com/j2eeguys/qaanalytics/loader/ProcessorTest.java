@@ -6,8 +6,7 @@
  */
 package com.j2eeguys.qaanalytics.loader;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -27,10 +26,9 @@ class ProcessorTest {
 
   protected Processor processor;
 
-  @BeforeEach
-  public void setupProcessor() {
+  protected void setupProcessor(final String fileName) {
     try (final InputStream templateStream =
-        Thread.currentThread().getContextClassLoader().getResourceAsStream("QCTemplate.xls");) {
+        Thread.currentThread().getContextClassLoader().getResourceAsStream(fileName);) {
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
       this.processor = new Processor("12", "2018", template, new File("src/test/resources"));
     } catch (IOException e) {
@@ -43,14 +41,16 @@ class ProcessorTest {
    */
   @Test
   void testProcess() throws IOException {
+    setupProcessor("QCTemplate.xls");
     this.processor.process();
     final File testSheetFile = new File("build/test", "December 2018 TestQC.xls");
-    if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()){
-      throw new RuntimeException("Unable to create working directory: " + testSheetFile.getParentFile().getAbsolutePath());
+    if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()) {
+      throw new RuntimeException(
+          "Unable to create working directory: " + testSheetFile.getParentFile().getAbsolutePath());
     }
-    try (final OutputStream testOut = new FileOutputStream(testSheetFile)){
-    this.processor.write(testOut);
-    testOut.flush();
+    try (final OutputStream testOut = new FileOutputStream(testSheetFile)) {
+      this.processor.write(testOut);
+      testOut.flush();
     }
     final File demoFile = new File("src/test/resources", "December 2018 QC.xls");
     assertEquals(demoFile.length(), testSheetFile.length());
@@ -58,10 +58,26 @@ class ProcessorTest {
 
   /**
    * Test method for {@link com.j2eeguys.qaanalytics.loader.Processor#write(java.io.OutputStream)}.
+   * @throws IOException thrown if any Exceptions occur during testing.
    */
   @Test
-  void testWrite() {
-    fail("Not yet implemented");
+  void testWrite() throws IOException {
+    setupProcessor("December 2018 QC.xls");
+    final File testSheetFile = new File("build/test", "TWDecember 2018 TestQC.xls");
+    if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()) {
+      throw new RuntimeException(
+          "Unable to create working directory: " + testSheetFile.getParentFile().getAbsolutePath());
+    }
+    try (final OutputStream testOut = new FileOutputStream(testSheetFile)) {
+      this.processor.write(testOut);
+      testOut.flush();
+    }
+    assertTrue(testSheetFile.exists());
+    final File demoFile = new File("src/test/resources", "December 2018 QC.xls");
+    //Writing sometimes increases the size of the file.
+    assertTrue(demoFile.length() <= testSheetFile.length());
+    
+    //end testWrite
   }
 
 }

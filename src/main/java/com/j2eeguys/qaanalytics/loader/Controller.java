@@ -9,6 +9,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 
@@ -42,6 +45,11 @@ public class Controller implements Runnable {
     // end <init>
   }
 
+  protected void setSheetDate(final HSSFWorkbook template) throws ParseException {
+    final Date date = new SimpleDateFormat("MM-YYYY").parse(this.year + "-" + this.month);
+    template.getSheetAt(0).getRow(0).getCell(2).setCellValue(date);
+    //end setSheetDate
+  }
   /*
    * (non-Javadoc)
    * @see java.lang.Runnable#run()
@@ -49,9 +57,11 @@ public class Controller implements Runnable {
   @Override
   public void run() {
     // Load Template
+    //TODO: Load Template from Filesystem if available, otherwise use embedded default.
     try (final InputStream templateStream = 
         Thread.currentThread().getContextClassLoader().getResourceAsStream("QCTemplate.xls");){
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
+      setSheetDate(template);
       // Invoke Processor with Date & Workbook.
       final Processor proccessor = new Processor(month, year, template, new File("."));
       proccessor.process();
@@ -60,8 +70,9 @@ public class Controller implements Runnable {
       proccessor.write(out);
     } catch (IOException e) {
       throw new RuntimeException("Exception accessing Template", e);
+    } catch (ParseException e) {
+      throw new RuntimeException("Exception setting Template date", e);
     }
-    // end run
   }
 
 }

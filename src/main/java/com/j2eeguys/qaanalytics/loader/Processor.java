@@ -10,7 +10,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -19,6 +23,7 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.ini4j.Profile;
+import org.ini4j.Profile.Section;
 import org.ini4j.Wini;
 
 /**
@@ -31,12 +36,16 @@ import org.ini4j.Wini;
  * @author Sanddust sanddust@j2eeguys.com
  * @author Gorky gorky@j2eeguys.com
  */
+//TODO: Support multiple machines
 public class Processor {
   protected File repDir;
   protected String month;
   protected String year;
   protected Workbook workbook;
 
+  protected Map<String, String> mappings;
+  protected Map<String, Integer> rangeStarts;
+  
   /**
    * @param month
    * @param year
@@ -62,24 +71,64 @@ public class Processor {
     try (final InputStream configStream = loaderConfig.exists() ? new FileInputStream(loaderConfig):
       Thread.currentThread().getContextClassLoader().getResourceAsStream("loader.config");
       ){
-      return new Wini(configStream);
+      final Wini config = new Wini(configStream);
+      this.mappings = config.get("Mappings");
+      loadRangeStarts(config);
+      return config;
     }
     //end loadConfig
   }
   
+  protected void loadRangeStarts(final Profile config) {
+    final Set<String> rangeNames = new HashSet<>(this.mappings.values());
+    this.rangeStarts = new HashMap<>(rangeNames.size());
+    final Section templateSection = config.get("Template");
+    //Row Numbers are 1-Offset, but we need to use 0-Offset.
+    final int rowFirstName = Integer.valueOf(templateSection.get("section.firstRow")) - 1
+        + Integer.valueOf(templateSection.get("section.nameRow")) - 1;
+    final int startDiff = Integer.valueOf(templateSection.get("section.nameRow"))
+        - Integer.valueOf(templateSection.get("section.firstRow")) 
+        + 1; //Skip the "Flag" row and start with the actual range row.
+    final int rangeSize = Integer.valueOf(templateSection.get("section.numRows"));
+    final Sheet firstSheet = this.workbook.getSheetAt(0);
+    for(int row = rowFirstName; this.rangeStarts.size() < rangeNames.size() &&
+        row < firstSheet.getLastRowNum();row += rangeSize) {
+      final String rangeName = firstSheet.getRow(row).getCell(0).getStringCellValue();
+      if (rangeNames.contains(rangeName)) {
+        this.rangeStarts.put(rangeName, Integer.valueOf(row - startDiff));
+      }
+    }
+    //loadRangeStarts
+  }
+  
+  protected int getRangeTopRow(final String name) {
+    final String rangeName = this.mappings.get(name);
+    if (rangeName == null) {
+      //Not a valid range.  Might be a sample.
+      return -1;
+    }//else
+    final Integer rangeStart = this.rangeStarts.get(rangeName);
+    if (rangeStart == null) {
+      throw new NullPointerException("Mapped Range not defined in Template Sheet: " + rangeName);
+    }
+    return rangeStart.intValue();
+    //end getRangeTopRow
+  }
+  
   /**
    * Process the Rep files
+   * @throws IOException thrown if the configuration file can not be loaded.
    */
-  public void process() {
-    // SPDTODO
-    // Load Maps
-    // SPDTODO
-    // Calculate number of days in the month!
+  public void process() throws IOException {
+    // Load Maps and Configs
+    final Profile config = loadConfig();
+    final int colDayStart = 
+        (int)config.get("Template", "column.day1").trim().charAt(0) - 'A';
+    // TODO: Calculate number of days in the month! - SPD
     final int days = 31;
     // Loop through the rep files
-    for (int i = 1; i <= days; i++) {
-      final String fileName = month + (i < 10 ? "0" + i : i) + year.substring(2) + ".rep";
-      // TODO: Check that the REP file is present!
+    for (int day = 1; day <= days; day++) {
+      final String fileName = month + (day < 10 ? "0" + day : day) + year.substring(2) + ".rep";
       final File repFile = new File(repDir, fileName);
       if (!repFile.exists()) {
         continue;
@@ -95,30 +144,32 @@ public class Processor {
             continue;
           }
           String name = rec.get(0);
+          final int rangeTopRow = getRangeTopRow(name);
+          //Skip Date Row
           iter.next();
-          String date = rec.get(0);
           for (; iter.hasNext() && (rec = iter.next()).size() > 0 && rec.get(0).startsWith("|");) {
-            // Will generally be LI on first cycle. Data is in Column 4;
-            final String element = rec.get(1);
-            final Sheet qcSheet = this.workbook.getSheet(element);
-            // TODO: Check that there was a tab for the element.
-            // If no tab, qcSheet == null.
-            if (qcSheet == null) {
-              // Blank Vaule, skip!
-              continue;
-            }
-            final String rawRepValue = rec.get(4);
-            if (rawRepValue == null || rawRepValue.isEmpty()) {
-              // Blank Value, skip!
-              continue;
-            } // else
-            final double repValue = Double.parseDouble(rawRepValue);
-            // SPDTODO: Get Row number based on Data Type (ex. China Hair) & Deviation
-            // Range.
-            // number of days added to the colmen subtracting 1 for 0-Offset of POI
-            final Cell currentCell = qcSheet.getRow(6).getCell(i + 6 - 1);
-            currentCell.setCellValue(repValue);
+            if (rangeTopRow > 0) {
+              // Will generally be LI on first cycle. Data is in Column 4;
+              final String element = rec.get(1);
+              final Sheet qcSheet = this.workbook.getSheet(element);
+              // If no tab, qcSheet == null.
+              if (qcSheet == null) {
+                // No Tab, skip!
+                continue;
+              }
+              final String rawRepValue = rec.get(4);
+              if (rawRepValue == null || rawRepValue.isEmpty()) {
+                // Blank Value, skip!
+                continue;
+              } // else
+              final double repValue = Double.parseDouble(rawRepValue);
+              // TODO: Get Row number based on Deviation Range. - SPD
+              // number of days added to the colmen subtracting 1 for 0-Offset of POI
+              final Cell currentCell = qcSheet.getRow(rangeTopRow).getCell(day + colDayStart - 1);
+              currentCell.setCellValue(repValue);
+            }//else, not a mapped QC Row.
           }
+          //TODO: Don't process the entire REP File!  Once all QC's are loaded, skip to next file! - SPD.
         }
       } catch (IOException e) {
         throw new RuntimeException("Error reading file: " + fileName, e);
@@ -129,11 +180,11 @@ public class Processor {
   }
 
   /**
-   * Save the Workbook
+   * Save the Workbook.
    * 
    * @throws IOException thrown if an exception occurs writing to the output file.
    */
-  public void write(final OutputStream out) throws IOException {
+  protected void write(final OutputStream out) throws IOException {
     this.workbook.write(out);
   }
 
