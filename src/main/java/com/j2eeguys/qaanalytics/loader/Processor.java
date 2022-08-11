@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -125,7 +126,9 @@ public class Processor {
     final int colDayStart = 
         (int)config.get("Template", "column.day1").trim().charAt(0) - 'A';
     // TODO: Calculate number of days in the month! - SPD
-    final int days = 31;
+ // Get the number of days in that month
+    YearMonth yearMonthObject = YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month));
+    int days = yearMonthObject.lengthOfMonth();  
     // Loop through the rep files
     for (int day = 1; day <= days; day++) {
       final String fileName = month + (day < 10 ? "0" + day : day) + year.substring(2) + ".rep";
