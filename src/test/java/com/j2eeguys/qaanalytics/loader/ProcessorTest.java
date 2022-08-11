@@ -6,16 +6,17 @@
  */
 package com.j2eeguys.qaanalytics.loader;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -29,19 +30,21 @@ class ProcessorTest {
   protected void setupProcessor(final String fileName) {
     try (final InputStream templateStream =
         Thread.currentThread().getContextClassLoader().getResourceAsStream(fileName);) {
+      @SuppressWarnings("resource") //Handed off for more processing
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
       this.processor = new Processor("12", "2018", template, new File("src/test/resources"));
     } catch (IOException e) {
       throw new RuntimeException("Exception initializing workbook", e);
     }
   }
-
+  
   /**
    * Test method for {@link com.j2eeguys.qaanalytics.loader.Processor#process()}.
    */
   @Test
   void testProcess() throws IOException {
     setupProcessor("QCTemplate.xls");
+    this.processor.loadConfig();
     this.processor.process();
     final File testSheetFile = new File("build/test", "December 2018 TestQC.xls");
     if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()) {

@@ -9,6 +9,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.Charset;
 import java.time.YearMonth;
 import java.util.HashMap;
@@ -21,6 +23,10 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.ini4j.Profile;
@@ -39,20 +45,40 @@ import org.ini4j.Wini;
  */
 //TODO: Support multiple machines
 public class Processor {
+  /**
+   * The directory with the reports and configuration files.
+   */
   protected File repDir;
+  /**
+   * The month being processed
+   */
   protected String month;
+  
+  /**
+   * The year being processed
+   */
   protected String year;
+  
+  /**
+   * The workbook to write the data to.
+   */
   protected Workbook workbook;
 
   protected Map<String, String> mappings;
   protected Map<String, Integer> rangeStarts;
   
   /**
-   * @param month
-   * @param year
-   * @param workbook
+   * The column with the ranges.
    */
-  public Processor(String month, String year, Workbook workbook, File repDir) {
+  protected int rangeColumn;
+
+  /**
+   * @param month the month being processed
+   * @param year the year being processed
+   * @param workbook the workbook to write the data to.
+   * @param repDir The directory with the reports and configuration files.
+   */
+  public Processor(final String month, final String year, final Workbook workbook, final File repDir) {
     super();
     this.month = month;
     this.year = year;
@@ -60,7 +86,7 @@ public class Processor {
     this.repDir = repDir;
     // end <init>
   }
-
+  
   /**
    * Load the ini style configuration file loader.config.  If not found in the local directory,
    * the default configuration will be loaded.
@@ -75,22 +101,51 @@ public class Processor {
       final Wini config = new Wini(configStream);
       this.mappings = config.get("Mappings");
       loadRangeStarts(config);
+      this.rangeColumn = getCharValue(config.get("Template"), "column.ranges") - 'A';
       return config;
     }
     //end loadConfig
   }
   
+  /**
+   * Get the char value of a configuration item.
+   * @param section The section with the configuration settings containing the key.
+   * @param configKey The lookup key for the configuration item
+   * @return the character value of the configuration item.
+   * @throws NullPointerException thrown if the configKey is not defined in the configuration file.
+   */
+  protected static char getCharValue(final Section section, final String configKey) {
+    return section.get(configKey).trim().charAt(0);
+    //end getCharValue
+  }
+  
+  /**
+   * Get the char value of a configuration item.
+   * @param section The section with the configuration settings containing the key.
+   * @param configKey The lookup key for the configuration item
+   * @return the character value of the configuration item.
+   * @throws NullPointerException thrown if the configKey is not defined in the configuration file.
+   */
+  protected static int getIntValue(final Section section, final String configKey) {
+    return Integer.parseInt(section.get(configKey).trim());
+    //end getIntValue
+  }
+  
+  /**
+   * Load the starting row for each of the ranges in to the map.
+   * @param config the config file wrapper.
+   */
   protected void loadRangeStarts(final Profile config) {
     final Set<String> rangeNames = new HashSet<>(this.mappings.values());
     this.rangeStarts = new HashMap<>(rangeNames.size());
     final Section templateSection = config.get("Template");
-    //Row Numbers are 1-Offset, but we need to use 0-Offset.
-    final int rowFirstName = Integer.valueOf(templateSection.get("section.firstRow")) - 1
-        + Integer.valueOf(templateSection.get("section.nameRow")) - 1;
-    final int startDiff = Integer.valueOf(templateSection.get("section.nameRow"))
-        - Integer.valueOf(templateSection.get("section.firstRow")) 
+    //Row Numbers are 1-Offset, but we need to use 0-Offset for the worksheet.
+    final int rowFirstName = getIntValue(templateSection, "section.firstRow") - 1
+        + getIntValue(templateSection, "section.nameRow") - 1;
+    final int startDiff = getIntValue(templateSection, "section.nameRow")
+        - getIntValue(templateSection, "section.firstRow")
         + 1; //Skip the "Flag" row and start with the actual range row.
-    final int rangeSize = Integer.valueOf(templateSection.get("section.numRows"));
+    final int rangeSize = getIntValue(templateSection, "section.numRows");
     final Sheet firstSheet = this.workbook.getSheetAt(0);
     for(int row = rowFirstName; this.rangeStarts.size() < rangeNames.size() &&
         row < firstSheet.getLastRowNum();row += rangeSize) {
@@ -102,6 +157,11 @@ public class Processor {
     //loadRangeStarts
   }
   
+  /**
+   * Get the first row for the range.
+   * @param name The name of the range to get the first row for.
+   * @return The first row of the range.
+   */
   protected int getRangeTopRow(final String name) {
     final String rangeName = this.mappings.get(name);
     if (rangeName == null) {
@@ -117,25 +177,105 @@ public class Processor {
   }
   
   /**
+   * Format the column with the same format as and precision as the range.  Also formats the Date Cell
+   * to match the Range Background.
+   * @param colRanges The column with the Ranges.
+   * @param firstRow The first row of data in the sheet.
+   * @param dateCol The column with the current day being processed.
+   */
+  protected void formatColumn(final int colRanges, final int firstRow, final int dateCol) {
+    for(final Iterator<Sheet> it = this.workbook.sheetIterator();it.hasNext();) {
+      final Sheet currentSheet = it.next();
+      //Do Date Row
+      final Row dateRow = currentSheet.getRow(firstRow - 1);
+      if (dateRow == null) {
+        //Not a Data Sheet
+        continue;
+      }
+      final Cell dateCell = dateRow.getCell(dateCol);
+      final CellStyle dateStyle = this.workbook.createCellStyle();
+      dateStyle.cloneStyleFrom(dateCell.getCellStyle());
+      final CellStyle rangeStyle = dateRow.getCell(colRanges).getCellStyle();
+      dateStyle.setFillPattern(rangeStyle.getFillPattern());
+      dateStyle.setFillBackgroundColor(rangeStyle.getFillBackgroundColor());
+      dateStyle.setFillForegroundColor(rangeStyle.getFillForegroundColor());
+      dateCell.setCellStyle(dateStyle);
+      
+      //Do Data Rows
+      for(int i = firstRow,rowCount = currentSheet.getLastRowNum(); i < rowCount;i++) {
+        final Row currentRow = currentSheet.getRow(i);
+        if (currentRow != null) {
+          final Cell rangeCell = currentRow.getCell(colRanges);
+          if (rangeCell != null) {
+            final CellStyle style = rangeCell.getCellStyle();
+            final Cell currentCell = currentRow.getCell(dateCol, MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            currentCell.setCellStyle(style);
+          }
+        }
+      }
+    }
+    //end formatColumn
+  }
+  
+  /**
+   * Compare two double values within a tolerance range.
+   * @param style the CellStyle with the precision.
+   * @param repValue the Value from the Report File.
+   * @param rangeValue the range limit value from the QC Spreadsheet.
+   * @return <ul>
+   * <li>+1 if the repValue > rangeValue + tolerance</li>
+   * <li>0 if the values are equal within range</li>
+   * <li>-1 otherwise</li>
+   * 
+   */
+  protected static int valueCompare(final CellStyle style, final double repValue,
+      final double rangeValue) {
+    final String formatString = style.getDataFormatString();
+    final double threshold = formatString.length() <= 2 ? 0 : //HACK for Template format not set.
+        Double.parseDouble(formatString + "1");
+    return Math.abs(repValue - rangeValue) < threshold ? 0 :
+      repValue > rangeValue + threshold ? 1 : -1
+      ;
+    //end valueCompare
+  }
+  
+  /**
+   * Round the report value to the precision specified in the range cell style.
+   * @param style The CellStyle with the precision.
+   * @param repValue The Report Value.
+   * @return the report value rounded to the style's precision.
+   */
+  protected static double roundRepValue(final CellStyle style, final String repValue) {
+    final String format = style.getDataFormatString().trim();
+    final int precision = format.length() - format.indexOf('.') - 1;
+    final BigDecimal bd = new BigDecimal(repValue).setScale(precision, RoundingMode.HALF_UP);
+    return bd.doubleValue();
+    //end roundRepValue
+  }
+  
+  /**
    * Process the Rep files
    * @throws IOException thrown if the configuration file can not be loaded.
    */
   public void process() throws IOException {
     // Load Maps and Configs
     final Profile config = loadConfig();
-    final int colDayStart = 
-        (int)config.get("Template", "column.day1").trim().charAt(0) - 'A';
+    final int colDayStart = getCharValue(config.get("Template"), "column.day1") - 'A';
+    final int colRanges = getCharValue(config.get("Template"), "column.ranges") - 'A';
     // TODO: Calculate number of days in the month! - SPD
  // Get the number of days in that month
     YearMonth yearMonthObject = YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month));
     int days = yearMonthObject.lengthOfMonth();  
     // Loop through the rep files
     for (int day = 1; day <= days; day++) {
-      final String fileName = month + (day < 10 ? "0" + day : day) + year.substring(2) + ".rep";
-      final File repFile = new File(repDir, fileName);
+      final String fileName =
+          this.month + (day < 10 ? "0" + day : Integer.toString(day)) + this.year.substring(2) + ".rep";
+      final File repFile = new File(this.repDir, fileName);
       if (!repFile.exists()) {
         continue;
       }
+      //Have a file, format the columns
+      formatColumn(colRanges, 2, colDayStart + day - 1); //Day is 1-Offset, Columns are 0-Offset.
       // Open CSV File
       try (final CSVParser parser = CSVParser.parse(repFile, Charset.forName("UTF-8"), CSVFormat.RFC4180)) {
         final Iterator<CSVRecord> iter = parser.iterator();
@@ -165,36 +305,42 @@ public class Processor {
                 // Blank Value, skip!
                 continue;
               } // else
-              final double repValue = Double.parseDouble(rawRepValue);
-              // TODO: Get Row number based on Deviation Range. - SPD
               // number of days added to the column subtracting 1 for 0-Offset of POI
-              final Cell medianCell = qcSheet.getRow(rangeTopRow + 2).getCell(5);
-              final double median = medianCell.getNumericCellValue();
+              final Cell medianCell = qcSheet.getRow(rangeTopRow + 2).getCell(colRanges);
+              final double median = 
+                  //HACK - If median not a numeric range Type, use 0 until Template is fixed.
+                  medianCell.getCellType() ==  CellType.NUMERIC ? 
+                      medianCell.getNumericCellValue() : 0;
               int trackNumber = 0;
-              if (repValue == median) {
-                trackNumber = rangeTopRow + 2;
-              } else if (repValue > median) {
-                final Cell rangeCell = qcSheet.getRow(rangeTopRow + 1).getCell(5);
-                final double rangeValue = rangeCell.getNumericCellValue();
-                if (repValue <= rangeValue) {
-                  trackNumber = 1; 
+              
+              final CellStyle medianStyle = medianCell.getCellStyle();
+              final double repValue = roundRepValue(medianStyle, rawRepValue);
+              switch(valueCompare(medianStyle, repValue, median)) {
+                case 1: {
+                  final Cell rangeCell = qcSheet.getRow(rangeTopRow + 1).getCell(colRanges);
+                  final double rangeValue = 
+                    //HACK - If not a numeric range Type, use 0 until Template is fixed.
+                      rangeCell.getCellType() ==  CellType.NUMERIC ? 
+                      rangeCell.getNumericCellValue() : 0;
+                  trackNumber = valueCompare(rangeCell.getCellStyle(), repValue, rangeValue) > 0 ? 0 : 1;
+                  break;
                 }
-                  else {
-                    trackNumber =0;
-                  }
-              } else {
-                final Cell rangeCell = qcSheet.getRow(rangeTopRow + 3).getCell(5);
-                final double rangeValue = rangeCell.getNumericCellValue();
-                if (repValue >= rangeValue) {
-                  trackNumber=3; 
-                } else {
-                    trackNumber=4;
+                case 0:
+                  trackNumber = 2;
+                  break;
+                default: {
+                  final Cell rangeCell = qcSheet.getRow(rangeTopRow + 3).getCell(colRanges);
+                  final double rangeValue = 
+                    //HACK - If not a numeric range Type, use 0 until Template is fixed.
+                      rangeCell.getCellType() ==  CellType.NUMERIC ? 
+                      rangeCell.getNumericCellValue() : 0;
+                  trackNumber = valueCompare(rangeCell.getCellStyle(), repValue, rangeValue) < 0 ? 4 : 3;
+                  break;
+                  
                 }
               }
-              Cell currentCell = qcSheet.getRow(rangeTopRow + trackNumber).getCell(day + colDayStart - 1);
-              if (currentCell == null) {
-                currentCell = qcSheet.getRow(rangeTopRow + trackNumber).createCell(day + colDayStart - 1);
-              }
+              final Cell currentCell =
+                  qcSheet.getRow(rangeTopRow + trackNumber).getCell(day + colDayStart - 1);
               currentCell.setCellValue(repValue);
             }//else, not a mapped QC Row.
           }
@@ -210,6 +356,7 @@ public class Processor {
 
   /**
    * Save the Workbook.
+   * @param out The OutputStream to write the Workbook to.
    * 
    * @throws IOException thrown if an exception occurs writing to the output file.
    */
