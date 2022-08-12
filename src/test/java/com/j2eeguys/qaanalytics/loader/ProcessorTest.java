@@ -14,19 +14,26 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigDecimal;
 
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
 /**
  * @author Sanddust sanddust@j2eeguys.com
+ * @author Gorky gorky@j2eeguys.com
  *
  */
 class ProcessorTest {
 
+  /**
+   * The {@link Processor} to use for testing.
+   */
   protected Processor processor;
 
+  /**
+   * Setupe the processor for testing.
+   * @param fileName the name of the file to load the source file from.
+   */
   protected void setupProcessor(final String fileName) {
     try (final InputStream templateStream =
         Thread.currentThread().getContextClassLoader().getResourceAsStream(fileName);) {
@@ -40,6 +47,7 @@ class ProcessorTest {
   
   /**
    * Test method for {@link com.j2eeguys.qaanalytics.loader.Processor#process()}.
+   * @throws IOException thrown if any exceptions occur during testing.
    */
   @Test
   void testProcess() throws IOException {
@@ -55,8 +63,8 @@ class ProcessorTest {
       this.processor.write(testOut);
       testOut.flush();
     }
-    final File demoFile = new File("src/test/resources", "December 2018 QC.xls");
-    assertEquals(demoFile.length(), testSheetFile.length());
+    assertEquals(502272, testSheetFile.length());
+    //end testProcess
   }
 
   /**

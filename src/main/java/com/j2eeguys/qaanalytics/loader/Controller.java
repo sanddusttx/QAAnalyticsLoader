@@ -22,7 +22,14 @@ import org.apache.poi.hssf.usermodel.HSSFWorkbook;
  */
 public class Controller implements Runnable {
 
+  /**
+   * The Month to process.
+   */
   protected String month;
+  
+  /**
+   * The Year to process.
+   */
   protected String year;
 
   /**
@@ -35,8 +42,8 @@ public class Controller implements Runnable {
   /**
    * Constructor for Controller.
    * 
-   * @param month
-   * @param year
+   * @param month The Month to process.
+   * @param year The Year to process.
    */
   public Controller(String month, String year) {
     super();
@@ -45,6 +52,11 @@ public class Controller implements Runnable {
     // end <init>
   }
 
+  /**
+   * Set the Date in the Spreadsheet.
+   * @param template
+   * @throws ParseException
+   */
   protected void setSheetDate(final HSSFWorkbook template) throws ParseException {
     final Date date = new SimpleDateFormat("MM-YYYY").parse(this.year + "-" + this.month);
     template.getSheetAt(0).getRow(0).getCell(2).setCellValue(date);
@@ -59,14 +71,16 @@ public class Controller implements Runnable {
     // Load Template
     //TODO: Load Template from Filesystem if available, otherwise use embedded default.
     try (final InputStream templateStream = 
-        Thread.currentThread().getContextClassLoader().getResourceAsStream("QCTemplate.xls");){
+        Thread.currentThread().getContextClassLoader().getResourceAsStream("QCTemplate.xls");
+        final OutputStream out = new FileOutputStream(new File("QCAnalytic.xls"));
+        ){
+      @SuppressWarnings("resource")
       final HSSFWorkbook template = new HSSFWorkbook(templateStream);
       setSheetDate(template);
       // Invoke Processor with Date & Workbook.
-      final Processor proccessor = new Processor(month, year, template, new File("."));
+      final Processor proccessor = new Processor(this.month, this.year, template, new File("."));
       proccessor.process();
       //Save Processed Data!
-      final OutputStream out = new FileOutputStream(new File("QCAnalytic.xls"));
       proccessor.write(out);
     } catch (IOException e) {
       throw new RuntimeException("Exception accessing Template", e);

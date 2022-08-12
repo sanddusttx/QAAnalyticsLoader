@@ -12,6 +12,7 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.Charset;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -24,6 +25,9 @@ import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -43,7 +47,189 @@ import org.ini4j.Wini;
  * @author Gorky gorky@j2eeguys.com
  */
 //TODO: Support multiple machines
+//TODO: Configure CLI type Build
 public class Processor {
+  
+  /**
+   * Holds the status of a QC Check being processed. 
+   * @author Gorky gorky@j2eeguys.com
+   */
+  protected class QCStatus {
+    private class Diff {
+      protected final double value;
+      protected final double diff;
+      protected final boolean above;
+      public Diff(final double value, final double diff, final boolean above) {
+        this.diff = diff;
+        this.value = value;
+        this.above = above;
+        //end <init>
+      }
+    }
+    /**
+     * Number of attempts to process QC Check.
+     */
+    private int count = 0;
+    /**
+     * If the QC Check processing has completed.
+     */
+    private boolean done = false;
+    
+    /**
+     * Map of elements to be processed and the value closest to the range limits found.
+     */
+    private Map<String, Diff> elements = new HashMap<>();
+    
+    /**
+     * Increment the number of attempts to process the current QC Check.
+     * @return the number of attempts made to process the current QC Check.
+     */
+    public int increment() {
+      this.count++;
+      return this.count;
+      //end increment
+    }
+
+    /**
+     * @return the number of attempts made to process the current QC Check.
+     */
+    public int getCount() {
+      return this.count;
+      //end getCount
+    }
+
+    /**
+     * @param element the Element that is Out Of Range
+     * @return true if the Element is Out of Range High.
+     */
+    public boolean isHigh(final String element) {
+      final Diff diff = this.elements.get(element);
+      if (diff == null) {
+        throw new IllegalArgumentException("Element not found: " + element);
+      }//else
+      return diff.above;
+      //end isHigh
+    }
+
+    /**
+     * @return if this QC Check is done processing.
+     */
+    public boolean isDone() {
+      return this.done;
+      //end isDone
+    }
+    
+    /**
+     * Set the Status to "Done".
+     */
+    public void setDone() {
+      this.done = true;
+      //end setDone
+    }
+    
+    /**
+     * @return if this status has any Out of Range values.
+     */
+    public boolean hasOutOfRange() {
+      return !this.elements.isEmpty();
+      //end hasOutOfRange
+    }
+    /**
+     * Clear an element from the out of range list.
+     * @param elementName the name of the element that was out of range.
+     * @return true if there are no additional elements that are out of range, false if there are still 
+     * out of range elements.
+     */
+    public boolean clearOutOfRange(final String elementName) {
+      this.elements.remove(elementName);
+      return this.elements.isEmpty();
+      //end clearOutOfRange
+    }
+    
+    /**
+     * 
+     * @param elementName the name of the element to check if out of range.
+     * @return if the current element is out of range.
+     */
+    public boolean isOutOfRange(final String elementName) {
+      return this.elements.containsKey(elementName);
+      //end isOutOfRange
+    }
+    
+    /**
+     * Add or update an out of range value.  Accepts the value that is closest to the ranges.  If
+     * a stored value is closer to an acceptable range value, the new value is rejected.
+     * @param elementName the name of the element out of range.
+     * @param maxCell the Cell with the max value for the range.
+     * @param lowCell the Cell with the lowest value for the range.
+     * @param value the out of range value.
+     * @return <ul>
+     * <li>+1 - if the value was accepted and higher than the max value</li>
+     * <li> 0 - if the value was not accepted</li>
+     * <li>-1 - if the value was accepted and lower than the min value</li>
+     * 
+     */
+    public int outOfRange(final String elementName, final Cell maxCell, final Cell lowCell,
+        final double value) {
+      final double maxValue = getCellValue(maxCell);
+      final boolean above = value > maxValue;
+      final Diff oldDiff = this.elements.get(elementName);
+      if (oldDiff == null) {
+        //Value not previously present
+        this.elements.put(elementName, 
+            new Diff(value, above ? value - maxValue : getCellValue(lowCell) - value, above));
+        return above ? 1 : -1;
+      }//else
+
+      //Generally reads are always high or low
+      if (oldDiff.above) {
+        final double maxDiff = value - maxValue;
+        if (maxDiff > 0) {
+          if (maxDiff < oldDiff.diff) {
+            this.elements.put(elementName, new Diff(value, maxDiff, above));
+            return 1;
+          }//else
+          return 0;
+        } //else
+        //Low Diff, check diff with low range value.
+        final double minValue = getCellValue(lowCell);
+        final double minDiff = minValue - value;
+        if (minDiff < maxDiff) {
+          //Closer value;
+          this.elements.put(elementName, new Diff(value, minDiff, !above));
+          return -1;
+        }//else
+        return 0;
+      } //else previous read was a low value 
+      final double minValue = getCellValue(lowCell);
+      final double minDiff = minValue - value;
+      if (minDiff > 0) {
+        if (minDiff < oldDiff.diff) {
+          this.elements.put(elementName, new Diff(value, minDiff, !above));
+          return -1;
+        }//else
+        return 0;
+      }//else a high value, check diff with high range value.
+      final double maxDiff = value - maxValue;
+      if (maxDiff < minDiff) {
+        this.elements.put(elementName, new Diff(value, maxDiff, above));
+        return 1;
+      }
+      return 0;
+      // end outOfRange
+    }
+    
+    /**
+     * @param element the Element to get the value for.
+     * @return the value for the Element that is closest to the Range Limit.
+     */
+    public double getValue(final String element) {
+      return this.elements.get(element).value;
+      //end getValue
+    }
+    
+    //end QCStatus
+  }
   /**
    * The directory with the reports and configuration files.
    */
@@ -63,7 +249,14 @@ public class Processor {
    */
   protected Workbook workbook;
 
+  /**
+   * Map of Report Sample names to QC Section Names.
+   */
   protected Map<String, String> mappings;
+  
+  /**
+   * Map of Range Names and first row in the Range.
+   */
   protected Map<String, Integer> rangeStarts;
   
   /**
@@ -128,6 +321,42 @@ public class Processor {
   protected static int getIntValue(final Section section, final String configKey) {
     return Integer.parseInt(section.get(configKey).trim());
     //end getIntValue
+  }
+  
+  /**
+   * Round the report value to the precision specified in the range cell style.
+   * @param style The CellStyle with the precision.
+   * @param repValue The Report Value.
+   * @return the report value rounded to the style's precision.
+   */
+  protected static double roundRepValue(final CellStyle style, final String repValue) {
+    final String format = style.getDataFormatString().trim();
+    final int precision = format.length() - format.indexOf('.') - 1;
+    final BigDecimal bd = new BigDecimal(repValue).setScale(precision, RoundingMode.HALF_UP);
+    return bd.doubleValue();
+    //end roundRepValue
+  }
+  
+  /**
+   * Compare two double values within a tolerance range.
+   * @param style the CellStyle with the precision.
+   * @param repValue the Value from the Report File.
+   * @param rangeValue the range limit value from the QC Spreadsheet.
+   * @return <ul>
+   * <li>+1 if the repValue > rangeValue + tolerance</li>
+   * <li>0 if the values are equal within range</li>
+   * <li>-1 otherwise</li>
+   * 
+   */
+  protected static int valueCompare(final CellStyle style, final double repValue,
+      final double rangeValue) {
+    final String formatString = style.getDataFormatString();
+    final double threshold = formatString.length() <= 2 ? 0 : //HACK for Template format not set.
+        Double.parseDouble(formatString + "1");
+    return Math.abs(repValue - rangeValue) < threshold ? 0 :
+      repValue > rangeValue + threshold ? 1 : -1
+      ;
+    //end valueCompare
   }
   
   /**
@@ -217,50 +446,27 @@ public class Processor {
   }
   
   /**
-   * Compare two double values within a tolerance range.
-   * @param style the CellStyle with the precision.
-   * @param repValue the Value from the Report File.
-   * @param rangeValue the range limit value from the QC Spreadsheet.
-   * @return <ul>
-   * <li>+1 if the repValue > rangeValue + tolerance</li>
-   * <li>0 if the values are equal within range</li>
-   * <li>-1 otherwise</li>
-   * 
+   * @param cell the cell to get the value for.
+   * @return the value of the cell if numeric, 0 if not a numeric cell.
    */
-  protected static int valueCompare(final CellStyle style, final double repValue,
-      final double rangeValue) {
-    final String formatString = style.getDataFormatString();
-    final double threshold = formatString.length() <= 2 ? 0 : //HACK for Template format not set.
-        Double.parseDouble(formatString + "1");
-    return Math.abs(repValue - rangeValue) < threshold ? 0 :
-      repValue > rangeValue + threshold ? 1 : -1
-      ;
-    //end valueCompare
+  protected static double getCellValue(final Cell cell) {
+    return 
+        //HACK - If median not a numeric range Type, use 0 until Template is fixed.
+        cell.getCellType() ==  CellType.NUMERIC ? 
+            cell.getNumericCellValue() : 0;
+    //end getCellValue
   }
-  
-  /**
-   * Round the report value to the precision specified in the range cell style.
-   * @param style The CellStyle with the precision.
-   * @param repValue The Report Value.
-   * @return the report value rounded to the style's precision.
-   */
-  protected static double roundRepValue(final CellStyle style, final String repValue) {
-    final String format = style.getDataFormatString().trim();
-    final int precision = format.length() - format.indexOf('.') - 1;
-    final BigDecimal bd = new BigDecimal(repValue).setScale(precision, RoundingMode.HALF_UP);
-    return bd.doubleValue();
-    //end roundRepValue
-  }
-  
   /**
    * Process the Rep files
    * @throws IOException thrown if the configuration file can not be loaded.
    */
+  @SuppressWarnings("null")//False positive on qcStatus access.
   public void process() throws IOException {
     // Load Maps and Configs
     final Profile config = loadConfig();
     final int colDayStart = getCharValue(config.get("Template"), "column.day1") - 'A';
     final int colRanges = getCharValue(config.get("Template"), "column.ranges") - 'A';
+    final int maxTry = getIntValue(config.get("General"), "sample.try");
     // TODO: Calculate number of days in the month! - SPD
     final int days = 31;
     // Loop through the rep files
@@ -271,6 +477,8 @@ public class Processor {
       if (!repFile.exists()) {
         continue;
       }
+      final Map<String, QCStatus> processedChecks = new HashMap<>();
+      
       //Have a file, format the columns
       formatColumn(colRanges, 2, colDayStart + day - 1); //Day is 1-Offset, Columns are 0-Offset.
       // Open CSV File
@@ -283,14 +491,36 @@ public class Processor {
             rec = iter.next();
             continue;
           }
-          String name = rec.get(0);
-          final int rangeTopRow = getRangeTopRow(name);
+          final String sampleName = rec.get(0);
+          final int rangeTopRow = getRangeTopRow(sampleName);
+          final boolean processSample;
+          QCStatus qcStatus;
+          if (rangeTopRow > 0) {
+            //If a Range to process, track the attempts, don't process if exceeded
+            qcStatus = processedChecks.get(sampleName);
+            if (qcStatus == null) {
+              qcStatus = new QCStatus();
+              processedChecks.put(sampleName, qcStatus);
+            }
+            processSample = !qcStatus.isDone() && qcStatus.increment() <= maxTry;
+          } else {
+            //not a range to process.
+            processSample = false;
+            qcStatus = null;
+          }
+          
+          
           //Skip Date Row
           iter.next();
+          final boolean firstAttempt = processSample && qcStatus.getCount() == 1;
           for (; iter.hasNext() && (rec = iter.next()).size() > 0 && rec.get(0).startsWith("|");) {
-            if (rangeTopRow > 0) {
+            if (processSample) {
               // Will generally be LI on first cycle. Data is in Column 4;
               final String element = rec.get(1);
+              //If not on first record, only process element that was previously OutOfRange
+              if (!firstAttempt && !qcStatus.isOutOfRange(element)) {
+                continue;
+              } //else
               final Sheet qcSheet = this.workbook.getSheet(element);
               // If no tab, qcSheet == null.
               if (qcSheet == null) {
@@ -304,51 +534,122 @@ public class Processor {
               } // else
               // number of days added to the column subtracting 1 for 0-Offset of POI
               final Cell medianCell = qcSheet.getRow(rangeTopRow + 2).getCell(colRanges);
-              final double median = 
-                  //HACK - If median not a numeric range Type, use 0 until Template is fixed.
-                  medianCell.getCellType() ==  CellType.NUMERIC ? 
-                      medianCell.getNumericCellValue() : 0;
+              final double median = getCellValue(medianCell);
               int trackNumber = 0;
               
               final CellStyle medianStyle = medianCell.getCellStyle();
+              //Compute Report Value to appropriate precision.
               final double repValue = roundRepValue(medianStyle, rawRepValue);
+              boolean ooRange = false;
               switch(valueCompare(medianStyle, repValue, median)) {
                 case 1: {
-                  final Cell rangeCell = qcSheet.getRow(rangeTopRow + 1).getCell(colRanges);
-                  final double rangeValue = 
-                    //HACK - If not a numeric range Type, use 0 until Template is fixed.
-                      rangeCell.getCellType() ==  CellType.NUMERIC ? 
-                      rangeCell.getNumericCellValue() : 0;
-                  trackNumber = valueCompare(rangeCell.getCellStyle(), repValue, rangeValue) > 0 ? 0 : 1;
+                  final Cell maxCell = qcSheet.getRow(rangeTopRow).getCell(colRanges);
+                  final double maxValue = getCellValue(maxCell);
+                  if (repValue <= maxValue) {
+                    final Cell rangeCell = qcSheet.getRow(rangeTopRow + 1).getCell(colRanges);
+                    final double rangeValue = getCellValue(rangeCell);
+                    trackNumber = valueCompare(rangeCell.getCellStyle(), repValue, rangeValue) > 0 ? 0 : 1;
+                    qcStatus.clearOutOfRange(element);
+                  } else {
+                    //Out of Range Value
+                    qcStatus.outOfRange(element, maxCell, 
+                            qcSheet.getRow(rangeTopRow + 4).getCell(colRanges), repValue);
+                    ooRange = true;
+                    trackNumber = 0;
+                  }
                   break;
                 }
                 case 0:
                   trackNumber = 2;
+                  qcStatus.clearOutOfRange(element);
                   break;
                 default: {
-                  final Cell rangeCell = qcSheet.getRow(rangeTopRow + 3).getCell(colRanges);
-                  final double rangeValue = 
-                    //HACK - If not a numeric range Type, use 0 until Template is fixed.
-                      rangeCell.getCellType() ==  CellType.NUMERIC ? 
-                      rangeCell.getNumericCellValue() : 0;
-                  trackNumber = valueCompare(rangeCell.getCellStyle(), repValue, rangeValue) < 0 ? 4 : 3;
+                  final Cell minCell = qcSheet.getRow(rangeTopRow + 4).getCell(colRanges);
+                  final double minValue = getCellValue(minCell);
+                  if (repValue >= minValue) {
+                    final Cell rangeCell = qcSheet.getRow(rangeTopRow + 3).getCell(colRanges);
+                    final double rangeValue = getCellValue(rangeCell);
+                    trackNumber = valueCompare(rangeCell.getCellStyle(), repValue, rangeValue) < 0 ? 4 : 3;
+                    qcStatus.clearOutOfRange(element);
+                  } else {
+                    //Out of Range Value
+                    qcStatus.outOfRange(element, 
+                        qcSheet.getRow(rangeTopRow).getCell(colRanges), minCell, repValue);
+                    ooRange = true;
+                    trackNumber = 4;
+                  }
                   break;
-                  
                 }
               }
-              final Cell currentCell =
-                  qcSheet.getRow(rangeTopRow + trackNumber).getCell(day + colDayStart - 1);
-              currentCell.setCellValue(repValue);
-            }//else, not a mapped QC Row.
+              if (ooRange == false) {
+                final Cell currentCell =
+                    qcSheet.getRow(rangeTopRow + trackNumber).getCell(day + colDayStart - 1);
+                currentCell.setCellValue(repValue);
+              } else {
+                if (qcStatus.getCount() >= maxTry) {
+                  //Write last value and set Color to Red.
+                  final Cell currentCell =
+                      qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? 0 : 4))
+                      .getCell(day + colDayStart - 1);
+                  currentCell.setCellValue(qcStatus.getValue(element));
+                  final CellStyle valueStyle = this.workbook.createCellStyle();
+                  valueStyle.cloneStyleFrom(currentCell.getCellStyle());
+                  final Font valueFont = this.workbook.getFontAt(valueStyle.getFontIndexAsInt());
+                  final Font alertFont = this.workbook.createFont();
+                  alertFont.setFontHeight(valueFont.getFontHeight());
+                  alertFont.setColor(Font.COLOR_RED);
+                  valueStyle.setFont(alertFont);
+                  currentCell.setCellStyle(valueStyle);
+                  //Set Flag Cell (the one above or below the Range) to red.
+                  final Cell flagCell = 
+                      qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? -1 : 5))
+                      .getCell(day + colDayStart - 1);
+                  final CellStyle flagStyle = this.workbook.createCellStyle();
+                  flagStyle.cloneStyleFrom(flagCell.getCellStyle());
+                  flagStyle.setFillForegroundColor(IndexedColors.RED1.getIndex());
+                  flagStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                  flagCell.setCellStyle(flagStyle);
+                }
+              }
+            }//else, not a mapped QC Row, or done processing QC Rows
+          }//end for elements in CVS Rec
+          if (qcStatus != null) {
+            if (qcStatus.hasOutOfRange()) {
+              if (qcStatus.getCount() >= maxTry) {
+                qcStatus.setDone();
+              } //else, still have items to process so don't set done.
+            } else {
+              qcStatus.setDone();
+            }
+          }//else, not a range check
+          //Don't process the entire REP File!  Once all QC's are loaded, skip to next file!
+          if (allStatusDone(processedChecks.values())) {
+            break;
           }
-          //TODO: Don't process the entire REP File!  Once all QC's are loaded, skip to next file! - SPD.
-        }
+        }//end for CSVRecord rec
       } catch (IOException e) {
         throw new RuntimeException("Error reading file: " + fileName, e);
       }
-
-    }
+    }//end for day
     // end process
+  }
+  
+  /**
+   * 
+   * @param processedChecks The Checks that have been processed.
+   * @return false if any {@link QCStatus} values are not done, true otherwise. 
+   */
+  protected boolean allStatusDone(final Collection<QCStatus> processedChecks) {
+    if (processedChecks.size() < this.mappings.size()) {
+      return false;
+    }//else
+    for (final QCStatus currentStatus : processedChecks) {
+      if (!currentStatus.isDone()) {
+        return false;
+      }
+    }
+    return true;
+    //end allStatusDone
   }
 
   /**
@@ -359,6 +660,8 @@ public class Processor {
    */
   protected void write(final OutputStream out) throws IOException {
     this.workbook.write(out);
+    out.flush();
+    //end write
   }
 
 }
