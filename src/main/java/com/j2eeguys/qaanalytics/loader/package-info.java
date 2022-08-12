@@ -6,13 +6,13 @@
 /**
  * This package contains the code to setup and run the QA Analytics Loader.
  * <ul>
- * <li>{@link Controller} handles:
+ * <li>{@link com.j2eeguys.qaanalytics.loader.Controller} handles:
  * <ul>
  * <li>opening up the template files for reading and writing.</li>
  * <li>building the list of files for processing</li>
  * <li>building the directory handles for reading/writing</li>
  * </ul>
- * <li>{@link Processor} reads the input files
+ * <li>{@link com.j2eeguys.qaanalytics.loader.Processor} reads the input files
  * and generates the output QC Spreadsheet based on the supplied or default
  * template.</li>
  * </ul>

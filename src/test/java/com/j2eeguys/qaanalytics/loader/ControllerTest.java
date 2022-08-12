@@ -29,7 +29,7 @@ class ControllerTest {
     }
     final Controller controller = new Controller("12", "2018");
     controller.run();
-    assertEquals(502272, testSheetFile.length());
+    assertEquals(366080, testSheetFile.length());
     //end testRun
   }
 
