@@ -468,7 +468,6 @@ public class Processor {
     final int colDayStart = getCharValue(config.get("Template"), "column.day1") - 'A';
     final int colRanges = getCharValue(config.get("Template"), "column.ranges") - 'A';
     final int maxTry = getIntValue(config.get("General"), "sample.try");
-    // TODO: Calculate number of days in the month! - SPD
  // Get the number of days in that month
     YearMonth yearMonthObject = YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month));
     int days = yearMonthObject.lengthOfMonth();  
