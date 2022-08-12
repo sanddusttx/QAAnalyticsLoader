@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.Charset;
 import java.util.Collection;
+import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -468,7 +469,9 @@ public class Processor {
     final int colRanges = getCharValue(config.get("Template"), "column.ranges") - 'A';
     final int maxTry = getIntValue(config.get("General"), "sample.try");
     // TODO: Calculate number of days in the month! - SPD
-    final int days = 31;
+ // Get the number of days in that month
+    YearMonth yearMonthObject = YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month));
+    int days = yearMonthObject.lengthOfMonth();  
     // Loop through the rep files
     for (int day = 1; day <= days; day++) {
       final String fileName =
