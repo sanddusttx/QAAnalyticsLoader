@@ -3,22 +3,34 @@
  */
 package com.j2eeguys.qaanalytics.loader;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.io.File;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * @author sanddust@j2eeguys.com
- *
+ * @author Sanddust sanddust@j2eeguys.com
+ * @author Gorky gorky@j2eeguys.com
  */
 class ControllerTest {
 
-	/**
-	 * Test method for {@link com.j2eeguys.qaanalytics.loader.Controller#run()}.
-	 */
-	@Test
-	void testRun() {
-		fail("Not yet implemented");
-	}
+  /**
+   * Test method for {@link Controller#run()}.
+   */
+  @SuppressWarnings("static-method")
+  @Test
+  void testRun() {
+    //BUG - This needs to be in the build/test dir
+    final File testSheetFile = new File(".", "QCAnalytic.xls");
+    if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()) {
+      throw new RuntimeException(
+          "Unable to create working directory: " + testSheetFile.getParentFile().getAbsolutePath());
+    }
+    final Controller controller = new Controller("12", "2018");
+    controller.run();
+    assertEquals(502272, testSheetFile.length());
+    //end testRun
+  }
 
 }
