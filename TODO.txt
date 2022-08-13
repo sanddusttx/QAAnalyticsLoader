@@ -1,0 +1,20 @@
+Module Support.
+
+Currently Apache POI is working on but not yet supporting modules.  When they do, the following can be used
+to build the module-info.java file:
+
+A new release of ini4j will also be needed.
+
+module com.j2eeguys.qaanalytics {
+  exports com.j2eeguys.qaanalytics.loader;
+  exports com.j2eeguys.qaanalytics;
+
+  requires java.base;
+  requires jdk.net;
+  
+  requires java.desktop;
+  requires org.apache.commons.io;
+  
+  requires ch.qos.logback.classic;
+//  requires apache.poi; //Name needs to be updated.
+}

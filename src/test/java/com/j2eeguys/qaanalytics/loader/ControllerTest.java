@@ -22,11 +22,12 @@ class ControllerTest {
   @Test
   void testRun() {
     //BUG - This needs to be in the build/test dir
-    final File testSheetFile = new File(".", "QCAnalytic.xls");
+    final File testSheetFile = new File(".", "2018-12-QCAnalysis.xls");
     if (!testSheetFile.getParentFile().exists() && !testSheetFile.getParentFile().mkdirs()) {
       throw new RuntimeException(
           "Unable to create working directory: " + testSheetFile.getParentFile().getAbsolutePath());
     }
+    assertTrue(!testSheetFile.exists() || testSheetFile.delete());
     final Controller controller = new Controller("12", "2018");
     controller.run();
     assertEquals(366080, testSheetFile.length());

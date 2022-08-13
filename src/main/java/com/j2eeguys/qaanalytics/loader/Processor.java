@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 This code is licensed under the GPLv2. Please contact
+ * Copyright (c) 2019, 2020, 2021, 2022 This code is licensed under the GPLv2. Please contact
  * Sanddust at sanddust@j2eeguys.com for additional licenses.
  */
 package com.j2eeguys.qaanalytics.loader;
@@ -12,8 +12,8 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.Charset;
-import java.util.Collection;
 import java.time.YearMonth;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -36,6 +36,8 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.ini4j.Profile;
 import org.ini4j.Profile.Section;
 import org.ini4j.Wini;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Processes the selected Month. Reads the .rep files from the input (or current
@@ -48,8 +50,9 @@ import org.ini4j.Wini;
  * @author Gorky gorky@j2eeguys.com
  */
 //TODO: Support multiple machines
-//TODO: Configure CLI type Build
 public class Processor {
+  
+  private static final Logger LOGGER = LoggerFactory.getLogger(Processor.class);
   
   /**
    * Holds the status of a QC Check being processed. 
@@ -234,7 +237,7 @@ public class Processor {
   /**
    * The directory with the reports and configuration files.
    */
-  protected File repDir;
+  protected File workingDir;
   /**
    * The month being processed
    */
@@ -264,19 +267,24 @@ public class Processor {
    * The column with the ranges.
    */
   protected int rangeColumn;
+  
+  /**
+   * The directory with the Reports.
+   */
+  protected File reportDir;
 
   /**
    * @param month the month being processed
    * @param year the year being processed
    * @param workbook the workbook to write the data to.
-   * @param repDir The directory with the reports and configuration files.
+   * @param workingDir The directory with the reports and configuration files.
    */
-  public Processor(final String month, final String year, final Workbook workbook, final File repDir) {
+  public Processor(final String month, final String year, final Workbook workbook, final File workingDir) {
     super();
     this.month = month;
     this.year = year;
     this.workbook = workbook;
-    this.repDir = repDir;
+    this.workingDir = workingDir;
     // end <init>
   }
   
@@ -288,16 +296,18 @@ public class Processor {
    */
   protected Profile loadConfig() throws IOException {
     final File loaderConfig = new File(".", "loader.config");
-    try (final InputStream configStream = loaderConfig.exists() ? new FileInputStream(loaderConfig):
-      Thread.currentThread().getContextClassLoader().getResourceAsStream("loader.config");
-      ){
+    try (final InputStream configStream = loaderConfig.exists() ? new FileInputStream(loaderConfig)
+        : Thread.currentThread().getContextClassLoader().getResourceAsStream("loader.config");) {
       final Wini config = new Wini(configStream);
       this.mappings = config.get("Mappings");
       loadRangeStarts(config);
       this.rangeColumn = getCharValue(config.get("Template"), "column.ranges") - 'A';
+      this.reportDir =
+          new File(this.workingDir, System.getProperty("sample.dir", config.get("General", "sample.dir")));
+      LOGGER.info("Loading reports from: {}", this.reportDir.getCanonicalPath());
       return config;
     }
-    //end loadConfig
+    // end loadConfig
   }
   
   /**
@@ -475,7 +485,7 @@ public class Processor {
     for (int day = 1; day <= days; day++) {
       final String fileName =
           this.month + (day < 10 ? "0" + day : Integer.toString(day)) + this.year.substring(2) + ".rep";
-      final File repFile = new File(this.repDir, fileName);
+      final File repFile = new File(this.workingDir, fileName);
       if (!repFile.exists()) {
         continue;
       }
