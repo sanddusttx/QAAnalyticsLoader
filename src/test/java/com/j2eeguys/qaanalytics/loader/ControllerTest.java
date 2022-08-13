@@ -30,7 +30,7 @@ class ControllerTest {
     assertTrue(!testSheetFile.exists() || testSheetFile.delete());
     final Controller controller = new Controller("12", "2018");
     controller.run();
-    assertEquals(366080, testSheetFile.length());
+    assertEquals(365056, testSheetFile.length());
     //end testRun
   }
 

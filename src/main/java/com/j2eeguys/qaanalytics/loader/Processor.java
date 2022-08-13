@@ -49,7 +49,6 @@ import org.slf4j.LoggerFactory;
  * @author Sanddust sanddust@j2eeguys.com
  * @author Gorky gorky@j2eeguys.com
  */
-//TODO: Support multiple machines
 public class Processor {
   
   private static final Logger LOGGER = LoggerFactory.getLogger(Processor.class);
@@ -269,6 +268,11 @@ public class Processor {
   protected int rangeColumn;
   
   /**
+   * The number of rows in a section.
+   */
+  protected int sectionSize;
+  
+  /**
    * The directory with the Reports.
    */
   protected File reportDir;
@@ -304,7 +308,7 @@ public class Processor {
       this.rangeColumn = getCharValue(config.get("Template"), "column.ranges") - 'A';
       this.reportDir =
           new File(this.workingDir, System.getProperty("sample.dir", config.get("General", "sample.dir")));
-      LOGGER.info("Loading reports from: {}", this.reportDir.getCanonicalPath());
+      LOGGER.info("Loading Configs from: {}", this.reportDir.getCanonicalPath());
       return config;
     }
     // end loadConfig
@@ -376,7 +380,8 @@ public class Processor {
    */
   protected void loadRangeStarts(final Profile config) {
     final Set<String> rangeNames = new HashSet<>(this.mappings.values());
-    this.rangeStarts = new HashMap<>(rangeNames.size());
+    final int rangeCount = rangeNames.size();
+    this.rangeStarts = new HashMap<>(rangeCount);
     final Section templateSection = config.get("Template");
     //Row Numbers are 1-Offset, but we need to use 0-Offset for the worksheet.
     final int rowFirstName = getIntValue(templateSection, "section.firstRow") - 1
@@ -386,22 +391,24 @@ public class Processor {
         + 1; //Skip the "Flag" row and start with the actual range row.
     final int rangeSize = getIntValue(templateSection, "section.numRows");
     final Sheet firstSheet = this.workbook.getSheetAt(0);
-    for(int row = rowFirstName; this.rangeStarts.size() < rangeNames.size() &&
+    for(int row = rowFirstName; this.rangeStarts.size() < rangeCount &&
         row < firstSheet.getLastRowNum();row += rangeSize) {
       final String rangeName = firstSheet.getRow(row).getCell(0).getStringCellValue();
       if (rangeNames.contains(rangeName)) {
         this.rangeStarts.put(rangeName, Integer.valueOf(row - startDiff));
       }
     }
+    this.sectionSize = rangeSize * rangeCount;
     //loadRangeStarts
   }
   
   /**
    * Get the first row for the range.
    * @param name The name of the range to get the first row for.
+   * @param machine the number of the machine being processed.
    * @return The first row of the range.
    */
-  protected int getRangeTopRow(final String name) {
+  protected int getRangeTopRow(final String name, final int machine) {
     final String rangeName = this.mappings.get(name);
     if (rangeName == null) {
       //Not a valid range.  Might be a sample.
@@ -411,7 +418,7 @@ public class Processor {
     if (rangeStart == null) {
       throw new NullPointerException("Mapped Range not defined in Template Sheet: " + rangeName);
     }
-    return rangeStart.intValue();
+    return rangeStart.intValue() + ((machine - 1) * this.sectionSize); //Machine is 0-Offset
     //end getRangeTopRow
   }
   
@@ -475,17 +482,25 @@ public class Processor {
   public void process() throws IOException {
     // Load Maps and Configs
     final Profile config = loadConfig();
-    final int colDayStart = getCharValue(config.get("Template"), "column.day1") - 'A';
-    final int colRanges = getCharValue(config.get("Template"), "column.ranges") - 'A';
-    final int maxTry = getIntValue(config.get("General"), "sample.try");
+    final Section templateSection = config.get("Template");
+    final int colDayStart = getCharValue(templateSection, "column.day1") - 'A';
+    final int colRanges = getCharValue(templateSection, "column.ranges") - 'A';
+    final Section generalSection = config.get("General");
+    final int maxTry = getIntValue(generalSection, "sample.try");
+    final int machineCount = getIntValue(generalSection, "machine.count");
+    final String machineBaseName = config.get("General", "machine.base.name");
  // Get the number of days in that month
     YearMonth yearMonthObject = YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month));
-    int days = yearMonthObject.lengthOfMonth();  
+    int days = yearMonthObject.lengthOfMonth();
+    for(int machine = 1; machine <= machineCount; machine++) {
+      final File machineDir = new File(this.reportDir, machineBaseName + machine);
+      LOGGER.info("Loading Reports from: {}", machineDir.getCanonicalPath());
+
     // Loop through the rep files
     for (int day = 1; day <= days; day++) {
       final String fileName =
           this.month + (day < 10 ? "0" + day : Integer.toString(day)) + this.year.substring(2) + ".rep";
-      final File repFile = new File(this.workingDir, fileName);
+      final File repFile = new File(machineDir, fileName);
       if (!repFile.exists()) {
         continue;
       }
@@ -504,7 +519,7 @@ public class Processor {
             continue;
           }
           final String sampleName = rec.get(0);
-          final int rangeTopRow = getRangeTopRow(sampleName);
+          final int rangeTopRow = getRangeTopRow(sampleName, machine);
           final boolean processSample;
           QCStatus qcStatus;
           if (rangeTopRow > 0) {
@@ -643,6 +658,8 @@ public class Processor {
         throw new RuntimeException("Error reading file: " + fileName, e);
       }
     }//end for day
+    }//end for machine
+    
     // end process
   }
   
