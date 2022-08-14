@@ -489,9 +489,10 @@ public class Processor {
     final int maxTry = getIntValue(generalSection, "sample.try");
     final int machineCount = getIntValue(generalSection, "machine.count");
     final String machineBaseName = config.get("General", "machine.base.name");
- // Get the number of days in that month
-    YearMonth yearMonthObject = YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month));
-    int days = yearMonthObject.lengthOfMonth();
+    // Get the number of days in that month
+    final YearMonth yearMonthObject =
+        YearMonth.of(Integer.valueOf(this.year).intValue(), Integer.valueOf(this.month).intValue());
+    final int days = yearMonthObject.lengthOfMonth();
     for(int machine = 1; machine <= machineCount; machine++) {
       final File machineDir = new File(this.reportDir, machineBaseName + machine);
       LOGGER.info("Loading Reports from: {}", machineDir.getCanonicalPath());

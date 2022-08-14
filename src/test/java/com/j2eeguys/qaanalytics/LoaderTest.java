@@ -16,6 +16,7 @@ class LoaderTest {
   /**
    * Test method for {@link Loader#queryDate()}.
    */
+  @SuppressWarnings("static-method")
   @Test
   @Tag("UI")
   void testQueryDate() {
