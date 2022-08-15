@@ -64,7 +64,8 @@ public class Controller implements Runnable {
    * @throws ParseException
    */
   protected void setSheetDate(final HSSFWorkbook template) throws ParseException {
-    final Date date = new SimpleDateFormat("MM-YYYY").parse(this.month + "-" + this.year);
+    final Date date = new SimpleDateFormat("MM-yyyy").parse(this.month + "-" + this.year);
+    LOGGER.info("Setting date: {}", date);
     template.getSheetAt(0).getRow(0).getCell(2).setCellValue(date);
     //end setSheetDate
   }

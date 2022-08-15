@@ -62,7 +62,7 @@ class ProcessorTest {
       this.processor.write(testOut);
       testOut.flush();
     }
-    assertEquals(501760, testSheetFile.length());
+    assertEquals(461824, testSheetFile.length());
     //end testProcess
   }
 

@@ -316,6 +316,7 @@ public class Processor {
       this.mappings = config.get("Mappings");
       loadRangeStarts(config);
       this.rangeColumn = getCharValue(config.get("Template"), "column.ranges") - 'A';
+      this.firstRow = getIntValue(config.get("Template"), "section.firstRow");
       this.reportDir =
           new File(this.workingDir, System.getProperty("sample.dir", config.get("General", "sample.dir")));
       LOGGER.info("Loading Configs from: {}", this.reportDir.getCanonicalPath());
@@ -383,9 +384,19 @@ public class Processor {
    */
   protected static int valueCompare(final CellStyle style, final double repValue, final double rangeValue) {
     final String formatString = style.getDataFormatString();
+    try {
     final double threshold = formatString.length() <= 2 ? 0 : // HACK for Template format not set.
         Double.parseDouble(formatString + "1");
-    return Math.abs(repValue - rangeValue) < threshold ? 0 : repValue > rangeValue + threshold ? 1 : -1;
+    return Math.abs(repValue - rangeValue) < threshold ? 0 :
+      repValue > rangeValue + threshold ? 1 : -1
+    ;
+} catch (NumberFormatException e) {
+  LOGGER.debug("Exception processing Range Format: {}", e.getMessage(), e);
+  LOGGER.debug("Range Cell Format set to {}", formatString);
+  return Math.abs(repValue - rangeValue) == 0 ? 0 :
+    repValue > rangeValue ? 1 : -1
+  ;
+}
     // end valueCompare
   }
 
@@ -440,40 +451,68 @@ public class Processor {
   }
 
   /**
+   * Style to use for the Date Cells.
+   */
+  protected CellStyle dateStyle;
+  
+  /**
+   * Style to use for the Flag Cells.
+   */
+  protected CellStyle flagStyle;
+  
+  /**
+   * First Row with data.
+   */
+  protected int firstRow;
+
+  /**
    * Format the column with the same format as and precision as the range. Also
    * formats the Date Cell to match the Range Background.
    * 
    * @param colRanges The column with the Ranges.
-   * @param firstRow  The first row of data in the sheet.
-   * @param dateCol   The column with the current day being processed.
+   * @param dateCol The column with the current day being processed.
+   * @param sectionFirstRow The first row of data in the section.
+   * @param sectionLastRow The last row of data in the section.
    */
-  protected void formatColumn(final int colRanges, final int firstRow, final int dateCol) {
+  protected void formatColumn(final int colRanges, final int dateCol, final int sectionFirstRow,
+      final int sectionLastRow) {
     for (final Iterator<Sheet> it = this.workbook.sheetIterator(); it.hasNext();) {
       final Sheet currentSheet = it.next();
       // Do Date Row
-      final Row dateRow = currentSheet.getRow(firstRow - 1);
+      final Row dateRow = currentSheet.getRow(this.firstRow - 1);
       if (dateRow == null) {
         // Not a Data Sheet
         continue;
       }
       final Cell dateCell = dateRow.getCell(dateCol);
-      final CellStyle dateStyle = this.workbook.createCellStyle();
-      dateStyle.cloneStyleFrom(dateCell.getCellStyle());
-      final CellStyle rangeStyle = dateRow.getCell(colRanges).getCellStyle();
-      dateStyle.setFillPattern(rangeStyle.getFillPattern());
-      dateStyle.setFillBackgroundColor(rangeStyle.getFillBackgroundColor());
-      dateStyle.setFillForegroundColor(rangeStyle.getFillForegroundColor());
-      dateCell.setCellStyle(dateStyle);
+      if (this.dateStyle == null) {
+        this.dateStyle = this.workbook.createCellStyle();
+        this.dateStyle.cloneStyleFrom(dateCell.getCellStyle());
+        final CellStyle rangeStyle = dateRow.getCell(colRanges).getCellStyle();
+        this.dateStyle.setFillPattern(rangeStyle.getFillPattern());
+        this.dateStyle.setFillBackgroundColor(rangeStyle.getFillBackgroundColor());
+        this.dateStyle.setFillForegroundColor(rangeStyle.getFillForegroundColor());
+      }
+      dateCell.setCellStyle(this.dateStyle);
 
       // Do Data Rows
-      for (int i = firstRow, rowCount = currentSheet.getLastRowNum(); i < rowCount; i++) {
+      for(int i = sectionFirstRow; i < sectionLastRow;i++) {
         final Row currentRow = currentSheet.getRow(i);
         if (currentRow != null) {
           final Cell rangeCell = currentRow.getCell(colRanges);
           if (rangeCell != null) {
-            final CellStyle style = rangeCell.getCellStyle();
+            final CellStyle rangeStyle = rangeCell.getCellStyle();
+            if (rangeCell.getCellType() != CellType.NUMERIC && rangeCell.getCellType() != CellType.BLANK) {
+              LOGGER.warn("NonNumber Range Cell defined - {}:{}:{} = {}|{}", currentSheet.getSheetName(),
+                  Character.valueOf((char) ('A' + colRanges)), Integer.valueOf(i + 1),
+                  rangeCell.getCellType(), rangeStyle.getDataFormatString());
+
+            }
             final Cell currentCell = currentRow.getCell(dateCol, MissingCellPolicy.CREATE_NULL_AS_BLANK);
-            currentCell.setCellStyle(style);
+            currentCell.setCellStyle(rangeStyle);
+          } else {
+            LOGGER.warn("Range Cell not defined - {}:{}:{}", currentSheet.getSheetName(),
+                Character.valueOf((char) ('A' + colRanges)), Integer.valueOf(i + 1));
           }
         }
       }
@@ -526,8 +565,13 @@ public class Processor {
         }
         final Map<String, QCStatus> processedChecks = new HashMap<>();
 
-        // Have a file, format the columns
-        formatColumn(colRanges, 2, colDayStart + day - 1); // Day is 1-Offset, Columns are 0-Offset.
+        //Have a file, format the columns
+        //Day is 1-Offset, Columns are 0-Offset.
+        //Machine is 1-Offset, Rows are 0-Offset.
+        final int currentSectionStart = this.firstRow - 1 //FirstRow is 1-Offset, Rows are 0-Offset
+            + ((machine - 1) * this.sectionSize);
+        final int currentSectionEnd = currentSectionStart + this.sectionSize;
+        formatColumn(colRanges, colDayStart + day - 1, currentSectionStart, currentSectionEnd); 
         // Open CSV File
         try (final CSVParser parser = CSVParser.parse(repFile, Charset.forName("UTF-8"), CSVFormat.RFC4180)) {
           final Iterator<CSVRecord> iter = parser.iterator();
@@ -578,6 +622,7 @@ public class Processor {
                   // Blank Value, skip!
                   continue;
                 } // else
+                CellStyle alertStyle = null; //One AlertStyle per machine/tab combination.
                 // number of days added to the column subtracting 1 for 0-Offset of POI
                 final Cell medianCell = qcSheet.getRow(rangeTopRow + 2).getCell(colRanges);
                 final double median = getCellValue(medianCell);
@@ -637,22 +682,28 @@ public class Processor {
                     final Cell currentCell = qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? 0 : 4))
                         .getCell(day + colDayStart - 1);
                     currentCell.setCellValue(qcStatus.getValue(element));
-                    final CellStyle valueStyle = this.workbook.createCellStyle();
-                    valueStyle.cloneStyleFrom(currentCell.getCellStyle());
-                    final Font valueFont = this.workbook.getFontAt(valueStyle.getFontIndexAsInt());
-                    final Font alertFont = this.workbook.createFont();
-                    alertFont.setFontHeight(valueFont.getFontHeight());
-                    alertFont.setColor(Font.COLOR_RED);
-                    valueStyle.setFont(alertFont);
-                    currentCell.setCellStyle(valueStyle);
-                    // Set Flag Cell (the one above or below the Range) to red.
-                    final Cell flagCell = qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? -1 : 5))
+                    if (alertStyle == null) {
+                      alertStyle = this.workbook.createCellStyle();
+                      alertStyle.cloneStyleFrom(currentCell.getCellStyle());
+                      final Font valueFont = this.workbook.getFontAt(alertStyle.getFontIndexAsInt());
+                      final Font alertFont = this.workbook.createFont();
+                      alertFont.setFontHeight(valueFont.getFontHeight());
+                      alertFont.setColor(Font.COLOR_RED);
+                      alertStyle.setFont(alertFont);
+                    }
+                    currentCell.setCellStyle(alertStyle);
+                    //Set Flag Cell (the one above or below the Range) to red.
+                    final Cell flagCell = 
+                        qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? -1 : 5))
                         .getCell(day + colDayStart - 1);
-                    final CellStyle flagStyle = this.workbook.createCellStyle();
-                    flagStyle.cloneStyleFrom(flagCell.getCellStyle());
-                    flagStyle.setFillForegroundColor(IndexedColors.RED1.getIndex());
-                    flagStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-                    flagCell.setCellStyle(flagStyle);
+                    if (this.flagStyle == null) {
+                      this.flagStyle = this.workbook.createCellStyle();
+                      this.flagStyle.cloneStyleFrom(flagCell.getCellStyle());
+                      this.flagStyle.setFillForegroundColor(IndexedColors.RED1.getIndex());
+                      this.flagStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                      
+                    }
+                    flagCell.setCellStyle(this.flagStyle);
                   }
                 }
               } // else, not a mapped QC Row, or done processing QC Rows
