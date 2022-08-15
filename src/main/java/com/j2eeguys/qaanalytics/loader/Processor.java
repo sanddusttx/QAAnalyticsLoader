@@ -59,6 +59,11 @@ public class Processor {
    * @author Gorky gorky@j2eeguys.com
    */
   protected class QCStatus {
+    
+    /**
+     * Holds the details of the Out-of-Range value for the element in the Range.
+     * @author Gorky gorky@j2eeguys.com
+     */
     private class Diff {
       protected final double value;
       protected final double diff;
@@ -679,31 +684,8 @@ public class Processor {
                 } else {
                   if (qcStatus.getCount() >= maxTry) {
                     // Write last value and set Color to Red.
-                    final Cell currentCell = qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? 0 : 4))
-                        .getCell(day + colDayStart - 1);
-                    currentCell.setCellValue(qcStatus.getValue(element));
-                    if (alertStyle == null) {
-                      alertStyle = this.workbook.createCellStyle();
-                      alertStyle.cloneStyleFrom(currentCell.getCellStyle());
-                      final Font valueFont = this.workbook.getFontAt(alertStyle.getFontIndexAsInt());
-                      final Font alertFont = this.workbook.createFont();
-                      alertFont.setFontHeight(valueFont.getFontHeight());
-                      alertFont.setColor(Font.COLOR_RED);
-                      alertStyle.setFont(alertFont);
-                    }
-                    currentCell.setCellStyle(alertStyle);
-                    //Set Flag Cell (the one above or below the Range) to red.
-                    final Cell flagCell = 
-                        qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? -1 : 5))
-                        .getCell(day + colDayStart - 1);
-                    if (this.flagStyle == null) {
-                      this.flagStyle = this.workbook.createCellStyle();
-                      this.flagStyle.cloneStyleFrom(flagCell.getCellStyle());
-                      this.flagStyle.setFillForegroundColor(IndexedColors.RED1.getIndex());
-                      this.flagStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-                      
-                    }
-                    flagCell.setCellStyle(this.flagStyle);
+                    alertStyle =
+                        processOoR(qcSheet, element, qcStatus, alertStyle, rangeTopRow, day, colDayStart);
                   }
                 }
               } // else, not a mapped QC Row, or done processing QC Rows
@@ -726,10 +708,84 @@ public class Processor {
         } catch (IOException e) {
           throw new RuntimeException("Error reading file: " + fileName, e);
         }
+        //Do any leftover OoR
+        processLeftOverOOR(processedChecks, machine, day, colDayStart);
       } // end for day
     } // end for machine
 
     // end process
+  }
+  
+  /**
+   * Process and Out Of Range (OoR) value.  This routine will write the OoR value to the appropriate
+   * cell and the value and flag cell fonts, background, and formatting appropriately.
+   * @param qcSheet     The Sheet for the element being written to.
+   * @param element     The Element being processed.
+   * @param qcStatus    The Status of the QC Sample with the OoR values being processed.
+   * @param alertStyle  The style to use for the alert cell.  Includes precision from the range.  Can be null.
+   * @param rangeTopRow The first row in the range for the value.
+   * @param day         The day of the month being processed.  1-Offset value.
+   * @param colDayStart The column that the days start in. 0-Offset value
+   * @return            New {@link CellStyle} for alerts if alertStyle was null (not yet defined).
+   */
+  protected CellStyle processOoR(final Sheet qcSheet, final String element, final QCStatus qcStatus,
+      CellStyle alertStyle, final int rangeTopRow, final int day, final int colDayStart) {
+
+    // Write last value and set Color to Red.
+    final Cell currentCell = qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? 0 : 4))
+        .getCell(day + colDayStart - 1);
+    currentCell.setCellValue(qcStatus.getValue(element));
+    if (alertStyle == null) {
+      // Assign previously null value.
+      alertStyle = this.workbook.createCellStyle();  //NOSONAR - Intentional assignment.
+      alertStyle.cloneStyleFrom(currentCell.getCellStyle());
+      final Font valueFont = this.workbook.getFontAt(alertStyle.getFontIndexAsInt());
+      final Font alertFont = this.workbook.createFont();
+      alertFont.setFontHeight(valueFont.getFontHeight());
+      alertFont.setColor(Font.COLOR_RED);
+      alertStyle.setFont(alertFont);
+    }
+    currentCell.setCellStyle(alertStyle);
+    //Set Flag Cell (the one above or below the Range) to red.
+    final Cell flagCell = 
+        qcSheet.getRow(rangeTopRow + (qcStatus.isHigh(element) ? -1 : 5))
+        .getCell(day + colDayStart - 1);
+    if (this.flagStyle == null) {
+      this.flagStyle = this.workbook.createCellStyle();
+      this.flagStyle.cloneStyleFrom(flagCell.getCellStyle());
+      this.flagStyle.setFillForegroundColor(IndexedColors.RED1.getIndex());
+      this.flagStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+      
+    }
+    flagCell.setCellStyle(this.flagStyle);
+    //Return current working value.  Allow caller to capture reference if needed.
+    //Note that LibreOffice only supports up to 4K Styles defined in the entire spreadsheet, so
+    //need to share styles where possible.
+    return alertStyle;
+    //end processOoR
+  }
+
+  /**
+   * Process and Out of Range values where there we less than Max Try QC Samples.
+   * @param processedChecks The QC Checks that were processed.
+   * @param machine Index of the Machine being processed.  1-Offset value.
+   * @param day The day being processed.  1-Offset value.
+   * @param colDayStart The column that the days start in. 0-Offset value.
+   */
+  protected void processLeftOverOOR(final Map<String, QCStatus> processedChecks, final int machine,
+      final int day, final int colDayStart) {
+    for (final Map.Entry<String, QCStatus> currentCheck : processedChecks.entrySet()) {
+      final String sampleName = currentCheck.getKey();
+      final QCStatus qcStatus = currentCheck.getValue();
+      if (!qcStatus.isDone() && qcStatus.hasOutOfRange()) {
+        //Insufficient QC Checks to find an in-range value.  Go with the current value.
+        for (final String element : qcStatus.elements.keySet()) {
+          final Sheet qcSheet = this.workbook.getSheet(element);
+          processOoR(qcSheet, element, qcStatus, null, getRangeTopRow(sampleName, machine), day, colDayStart);
+        }//end for element
+      }//end OoR value
+    }//end for currentCheck
+    //end processLeftOverOOR
   }
 
   /**
