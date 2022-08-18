@@ -365,13 +365,13 @@ public class Processor {
    * 
    * @param style    The CellStyle with the precision.
    * @param repValue The Report Value.
-   * @return the report value rounded to the style's precision.
    */
   protected static double roundRepValue(final CellStyle style, final String repValue) {
     final String format = style.getDataFormatString().trim();
     final int precision = format.length() - format.indexOf('.') - 1;
     final BigDecimal bd = new BigDecimal(repValue).setScale(precision, RoundingMode.HALF_UP);
-    return bd.doubleValue();
+    final double value =  bd.doubleValue();
+    return value < 0 ? 0 : value;
     // end roundRepValue
   }
 
